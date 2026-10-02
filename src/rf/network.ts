@@ -23,10 +23,24 @@ export type ElementKind =
 
 interface Base { id: string; kind: ElementKind; label?: string; }
 
-/** Lumped element. value is SI: Ω for R, H for L, F for C. */
+/**
+ * Lumped element. value is SI: Ω for R, H for L, F for C.
+ *
+ * Optional non-ideal parameters (inductors and capacitors only):
+ *  - q:   unloaded quality factor at the design frequency f0. Modelled as a
+ *         frequency-independent series loss resistance (ESR):
+ *           inductor  R_s = ω0·L/Q0      → Q(f) = Q0·f/f0
+ *           capacitor R_s = 1/(ω0·C·Q0)  → Q(f) = Q0·f0/f
+ *  - srf: self-resonant frequency (Hz).
+ *           inductor:  parallel capacitance C_p = 1/(ω_s² L), Z = (R_s + jωL) ‖ 1/(jωC_p)
+ *           capacitor: series inductance  L_s = 1/(ω_s² C), Z = R_s + jωL_s + 1/(jωC)
+ * Missing, zero or non-finite values mean "ideal".
+ */
 export interface Lumped extends Base {
   kind: 'seriesR' | 'seriesL' | 'seriesC' | 'shuntR' | 'shuntL' | 'shuntC';
   value: number;
+  q?: number;
+  srf?: number;
 }
 
 /** Transmission-line section in cascade. */
@@ -161,17 +175,63 @@ export function sectionGammaL(lengthWl: number, lossDb: number, f: number, f0: n
   return c(lossDb / DB_PER_NEPER, beta);
 }
 
-/** Normalised impedance of a series element at frequency f, or admittance of a shunt element. */
-export function lumpedImmittance(el: Lumped, f: number, Z0: number): Complex {
-  const w = 2 * Math.PI * f;
-  switch (el.kind) {
-    case 'seriesR': return c(el.value / Z0, 0);
-    case 'seriesL': return c(0, (w * el.value) / Z0);
-    case 'seriesC': return c(0, -1 / (w * el.value * Z0));
-    case 'shuntR': return c(Z0 / el.value, 0);
-    case 'shuntL': return c(0, -Z0 / (w * el.value));
-    case 'shuntC': return c(0, w * el.value * Z0);
+const validParam = (v: number | undefined): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+export const isNonIdeal = (el: Lumped): boolean =>
+  (el.kind.endsWith('L') || el.kind.endsWith('C')) && (validParam(el.q) || validParam(el.srf));
+
+/**
+ * Absolute impedance (Ω) of the physical component at frequency f, including the
+ * optional ESR / self-resonance model (see `Lumped`). f0 is where Q is specified.
+ */
+export function componentImpedance(el: Lumped, f: number, f0: number = f): Complex {
+  const w = 2 * Math.PI * f, w0 = 2 * Math.PI * f0;
+  const kind = el.kind.slice(-1) as 'R' | 'L' | 'C';
+  if (kind === 'R') return c(el.value, 0);
+  if (kind === 'L') {
+    const Rs = validParam(el.q) ? (w0 * el.value) / el.q : 0;
+    const Zl = c(Rs, w * el.value);
+    if (!validParam(el.srf)) return Zl;
+    const ws = 2 * Math.PI * el.srf;
+    const Cp = 1 / (ws * ws * el.value);
+    // (R + jωL) ‖ (1/jωCp) = Zl / (1 + jωCp·Zl)
+    return div(Zl, add(ONE, mul(c(0, w * Cp), Zl)));
   }
+  const Rs = validParam(el.q) ? 1 / (w0 * el.value * el.q) : 0;
+  let X = -1 / (w * el.value);
+  if (validParam(el.srf)) {
+    const ws = 2 * Math.PI * el.srf;
+    X += w / (ws * ws * el.value); // + ωL_s with L_s = 1/(ω_s² C)
+  }
+  return c(Rs, X);
+}
+
+/**
+ * Normalised impedance of a series element at frequency f, or normalised
+ * admittance of a shunt element. Ideal components reduce to
+ * jωL/Z0, −j/(ωC Z0) (series) and −jZ0/(ωL), jωC Z0 (shunt).
+ */
+export function lumpedImmittance(el: Lumped, f: number, Z0: number, f0: number = f): Complex {
+  const w = 2 * Math.PI * f;
+  if (!isNonIdeal(el)) {
+    switch (el.kind) {
+      case 'seriesR': return c(el.value / Z0, 0);
+      case 'seriesL': return c(0, (w * el.value) / Z0);
+      case 'seriesC': return c(0, -1 / (w * el.value * Z0));
+      case 'shuntR': return c(Z0 / el.value, 0);
+      case 'shuntL': return c(0, -Z0 / (w * el.value));
+      case 'shuntC': return c(0, w * el.value * Z0);
+    }
+  }
+  const Z = componentImpedance(el, f, f0);
+  if (el.kind.startsWith('series')) return scale(Z, 1 / Z0);
+  if (abs(Z) < 1e-300) return c(Infinity, 0);
+  return div(c(Z0, 0), Z);
+}
+
+/** Effective quality factor |X|/R of a component at frequency f (Infinity if lossless). */
+export function componentQ(el: Lumped, f: number, f0: number): number {
+  const Z = componentImpedance(el, f, f0);
+  return Z.re > 0 ? Math.abs(Z.im) / Z.re : Infinity;
 }
 
 export const isSeries = (k: ElementKind): boolean => k === 'seriesR' || k === 'seriesL' || k === 'seriesC';
@@ -202,9 +262,9 @@ export function stubImmittance(s: Stub, f: number, f0: number, Z0: number, lengt
 export function applyElement(g: Complex, el: Element, ctx: EvalContext): Complex {
   switch (el.kind) {
     case 'seriesR': case 'seriesL': case 'seriesC':
-      return addSeriesZ(g, lumpedImmittance(el, ctx.f, ctx.Z0));
+      return addSeriesZ(g, lumpedImmittance(el, ctx.f, ctx.Z0, ctx.f0));
     case 'shuntR': case 'shuntL': case 'shuntC':
-      return addShuntY(g, lumpedImmittance(el, ctx.f, ctx.Z0));
+      return addShuntY(g, lumpedImmittance(el, ctx.f, ctx.Z0, ctx.f0));
     case 'line':
       return propagateGamma(g, c(el.z0 / ctx.Z0, 0), sectionGammaL(el.lengthWl, el.lossDb, ctx.f, ctx.f0));
     case 'stub': {
@@ -247,9 +307,9 @@ export function elementPath(g: Complex, el: Element, ctx: EvalContext, steps = 9
 function applyScaled(g: Complex, el: Element, ctx: EvalContext, t: number): Complex {
   switch (el.kind) {
     case 'seriesR': case 'seriesL': case 'seriesC':
-      return addSeriesZ(g, scale(lumpedImmittance(el, ctx.f, ctx.Z0), t));
+      return addSeriesZ(g, scale(lumpedImmittance(el, ctx.f, ctx.Z0, ctx.f0), t));
     case 'shuntR': case 'shuntL': case 'shuntC':
-      return addShuntY(g, scale(lumpedImmittance(el, ctx.f, ctx.Z0), t));
+      return addShuntY(g, scale(lumpedImmittance(el, ctx.f, ctx.Z0, ctx.f0), t));
     case 'line':
       return propagateGamma(g, c(el.z0 / ctx.Z0, 0), sectionGammaL(el.lengthWl * t, el.lossDb * t, ctx.f, ctx.f0));
     case 'stub': {
@@ -282,6 +342,40 @@ const angleToWl = (theta: number): number => {
  * contour allows. Used for "drag along the correct contour" interactions.
  */
 export function solveElementToward(gStart: Complex, el: Element, gTarget: Complex, ctx: EvalContext): Element {
+  const ideal = solveIdealToward(gStart, el, gTarget, ctx);
+  if ((ideal.kind.endsWith('L') || ideal.kind.endsWith('C')) && ideal.kind !== 'stub' && isNonIdeal(ideal as Lumped)) {
+    return refineLumped(gStart, ideal as Lumped, gTarget, ctx);
+  }
+  return ideal;
+}
+
+/**
+ * Non-ideal L/C: the ideal value puts the reactance right but ESR and self-resonance
+ * shift it. Newton iteration (numerical derivative, log-value) on the reactive part
+ * of the added immittance so the endpoint lands on the same reactance/susceptance
+ * contour as the pointer. Falls back to the ideal value if it does not converge.
+ */
+function refineLumped(gStart: Complex, el: Lumped, gTarget: Complex, ctx: EvalContext): Lumped {
+  const series = el.kind.startsWith('series');
+  const need = series ? gammaToZ(gTarget).im - gammaToZ(gStart).im : gammaToY(gTarget).im - gammaToY(gStart).im;
+  const f = (lv: number) => lumpedImmittance({ ...el, value: Math.exp(lv) }, ctx.f0, ctx.Z0, ctx.f0).im - need;
+  let x = Math.log(el.value);
+  for (let i = 0; i < 40; i++) {
+    const fx = f(x);
+    if (Math.abs(fx) < 1e-10 * (1 + Math.abs(need))) break;
+    const h = 1e-6;
+    const d = (f(x + h) - fx) / h;
+    if (!Number.isFinite(d) || Math.abs(d) < 1e-300) break;
+    let step = fx / d;
+    step = Math.max(-1, Math.min(1, step));
+    x -= step;
+  }
+  const v = Math.exp(x);
+  if (!Number.isFinite(v) || Math.abs(f(x)) > 1e-3 * (1 + Math.abs(need))) return el;
+  return { ...el, value: v };
+}
+
+function solveIdealToward(gStart: Complex, el: Element, gTarget: Complex, ctx: EvalContext): Element {
   const w = 2 * Math.PI * ctx.f0;
   const zS = gammaToZ(gStart), zT = gammaToZ(gTarget);
   const yS = gammaToY(gStart), yT = gammaToY(gTarget);
