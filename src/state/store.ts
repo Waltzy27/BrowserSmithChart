@@ -7,6 +7,10 @@
 import { type Complex, c } from '../math/complex';
 import { zToGamma } from '../math/smith';
 import type { Element, LoadModel } from '../rf/network';
+import { kvSet, kvGet, libraryAvailable } from './library';
+
+declare const __APP_VERSION__: string;
+export const APP_VERSION: string = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 
 export type GridMode = 'Z' | 'Y' | 'ZY' | 'YZ';
 export type Tool = 'select' | 'place' | 'compass' | 'protractor' | 'ruler';
@@ -58,6 +62,8 @@ export interface AppState {
     scales: boolean;        // angle + wavelength rings
     paperY: boolean;        // show the 180°-reflected admittance point (paper method)
     labels: boolean;
+    /** Double-stub spacing (λ) whose rotated g = 1 circle and forbidden region are drawn; 0 = off. */
+    stubGuide: number;
   };
   sweep: { enabled: boolean; spanPct: number; points: number };
   snap: SnapMode;
@@ -83,7 +89,7 @@ export function defaultState(): AppState {
     markers: [],
     activeTraceId: null,
     gridMode: 'ZY',
-    overlays: { vswrCircle: true, matchCircles: false, qCircle: 0, scales: true, paperY: false, labels: true },
+    overlays: { vswrCircle: true, matchCircles: false, qCircle: 0, scales: true, paperY: false, labels: true, stubGuide: 0 },
     sweep: { enabled: false, spanPct: 50, points: 201 },
     snap: 'off',
     tool: 'select',
@@ -94,7 +100,14 @@ export function defaultState(): AppState {
 
 type Listener = (s: AppState, prev: AppState) => void;
 
-const STORAGE_KEY = 'browser-smith-chart:project:v1';
+/**
+ * Autosave keys. Each major app version uses its own key so an archived version
+ * (e.g. /v0.1/) and the current one never overwrite each other's work; on first
+ * start the newest older key is migrated.
+ */
+const STORAGE_KEY = 'browser-smith-chart:project:v2';
+const LEGACY_KEYS = ['browser-smith-chart:project:v1'];
+const IDB_FLAG = 'browser-smith-chart:autosave-in-idb';
 const MAX_HISTORY = 150;
 
 /** Keys whose changes are view-only and should not create undo steps. */
@@ -192,7 +205,14 @@ export class Store {
     if (typeof window === 'undefined') return;
     window.clearTimeout(this.saveTimer);
     this.saveTimer = window.setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, serializeProject(this.state)); } catch { /* quota or private mode */ }
+      const json = serializeProject(this.state);
+      try {
+        localStorage.setItem(STORAGE_KEY, json);
+        localStorage.removeItem(IDB_FLAG);
+      } catch {
+        // Too large for localStorage (big Touchstone data) → IndexedDB
+        if (libraryAvailable()) kvSet(STORAGE_KEY, json).then(() => { try { localStorage.setItem(IDB_FLAG, '1'); } catch { /* ignore */ } }).catch(() => { /* private mode */ });
+      }
     }, 400);
   }
 }
@@ -206,7 +226,7 @@ export const PROJECT_FORMAT = 'browser-smith-chart-project';
 export function serializeProject(s: AppState): string {
   const { selection: _sel, tool: _tool, ...rest } = s;
   void _sel; void _tool;
-  return JSON.stringify({ format: PROJECT_FORMAT, app: '0.1.0', savedAt: new Date().toISOString(), state: rest });
+  return JSON.stringify({ format: PROJECT_FORMAT, app: APP_VERSION, savedAt: new Date().toISOString(), state: rest });
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -249,7 +269,19 @@ export function loadProject(text: string): AppState {
 
 export function loadAutosave(): AppState | null {
   try {
-    const t = localStorage.getItem(STORAGE_KEY);
+    for (const k of [STORAGE_KEY, ...LEGACY_KEYS]) {
+      const t = localStorage.getItem(k);
+      if (t) return loadProject(t);
+    }
+  } catch { /* corrupt or unavailable */ }
+  return null;
+}
+
+/** Autosaves too large for localStorage live in IndexedDB; resolve them asynchronously. */
+export async function loadLargeAutosave(): Promise<AppState | null> {
+  try {
+    if (localStorage.getItem(IDB_FLAG) !== '1' || !libraryAvailable()) return null;
+    const t = await kvGet(STORAGE_KEY);
     return t ? loadProject(t) : null;
   } catch { return null; }
 }

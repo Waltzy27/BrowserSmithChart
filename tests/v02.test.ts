@@ -228,3 +228,22 @@ describe('multisection transformers  [Pozar §5.6–5.7]', () => {
     }
   });
 });
+
+describe('documentation claims', () => {
+  it('printed Table 5.2 designs (N ≥ 3, Γm = 0.05) have ripple slightly below 0.05', () => {
+    // largest interior local maximum of |Γ(θ)| (the ripple peaks), θ in (0.3, π/2]
+    const peak = (Z: number[], R: number) => {
+      let p = 0, g0 = 0, g1 = 0;
+      for (let k = 0; k <= 20000; k++) {
+        const th = 0.3 + (Math.PI / 2 - 0.3) * (k / 20000);
+        const g = steppedGamma(Z, 1, R, th);
+        if (k >= 2 && g1 > g0 && g1 >= g) p = Math.max(p, g1);
+        g0 = g1; g1 = g;
+      }
+      return Math.max(p, g1); // N even: a ripple peak sits at θ = π/2
+    };
+    const a = peak([1.1475, 1.4142, 1.7429], 2), b = peak([1.2832, 2.2268, 4.4907, 7.7930], 10);
+    expect(a).toBeGreaterThan(0.045); expect(a).toBeLessThan(0.0495);
+    expect(b).toBeGreaterThan(0.045); expect(b).toBeLessThan(0.0495);
+  });
+});

@@ -6,17 +6,21 @@ import './styles/app.css';
 import { type Complex, c, mul } from './math/complex';
 import { gammaToZ, gammaMetrics } from './math/smith';
 import { fix, formatRect } from './math/units';
-import { Store, defaultState, loadAutosave, type Tool, type GridMode, type AppState } from './state/store';
+import { Store, defaultState, loadAutosave, loadLargeAutosave, type Tool, type GridMode, type AppState } from './state/store';
 import { ChartView } from './ui/chart';
 import { DesignPanel } from './ui/panelDesign';
 import { InspectPanel } from './ui/panelInspect';
 import { CalcPanel } from './ui/panelCalc';
 import { EquationsPanel } from './ui/panelEquations';
 import { DataPanel } from './ui/panelData';
+import { SchematicStrip } from './ui/schematic';
+import { versionBadge } from './ui/versions';
 import { h, svgIcon, segmented, toggle, toast } from './ui/dom';
 
 const store = new Store(loadAutosave() ?? defaultState());
 document.documentElement.dataset.theme = store.get().theme;
+// Autosaves too big for localStorage were written to IndexedDB; they are newer when present.
+loadLargeAutosave().then((st) => { if (st) store.replace(st, true); });
 
 const chart = new ChartView(store);
 const design = new DesignPanel(store);
@@ -24,6 +28,7 @@ const inspect = new InspectPanel(store);
 const calc = new CalcPanel(store);
 const equations = new EquationsPanel(store);
 const data = new DataPanel(store);
+const schematic = new SchematicStrip(store);
 data.onExportSVG = () => chart.exportSVG();
 
 /* ---------------- icons ---------------- */
@@ -56,7 +61,7 @@ const gridSeg = h('div', { class: 'grid-seg' });
 const renderGridSeg = () => gridSeg.replaceChildren(segmented<GridMode>('Chart grid', [['Z', 'Z', 'Impedance grid'], ['Y', 'Y', 'Admittance grid'], ['ZY', 'ZY', 'Impedance grid with admittance overlay'], ['YZ', 'YZ', 'Admittance grid with impedance overlay']], store.get().gridMode, (v) => store.update((s) => ({ ...s, gridMode: v })), true));
 
 const header = h('header', { class: 'topbar' },
-  h('div', { class: 'brand' }, svgIcon(I.logo, 26), h('div', {}, h('span', { class: 'brand-name' }, 'Smith Chart'), h('span', { class: 'brand-sub' }, 'browser RF workbench'))),
+  h('div', { class: 'brand' }, svgIcon(I.logo, 26), h('div', {}, h('span', { class: 'brand-name' }, 'Smith Chart'), h('span', { class: 'brand-sub' }, 'browser RF workbench')), versionBadge()),
   h('div', { class: 'top-ctrls' }, gridSeg, h('span', { class: 'divider' }), undoBtn, redoBtn, themeBtn, helpBtn,
     h('a', { class: 'icon-btn', href: 'https://github.com/Waltzy27/BrowserSmithChart', target: '_blank', rel: 'noopener', 'aria-label': 'Source on GitHub', title: 'Source on GitHub' }, svgIcon(I.github))),
 );
@@ -92,6 +97,7 @@ function renderLayers(): void {
     toggle('Angle & wavelength scales', o.scales, (v) => set({ scales: v })),
     toggle('Grid labels', o.labels, (v) => set({ labels: v })),
     toggle('Paper Y point (reflect through centre)', o.paperY, (v) => set({ paperY: v })),
+    toggle('Double-stub guide (rotated g = 1, forbidden region)', o.stubGuide > 0, (v) => set({ stubGuide: v ? 0.125 : 0 })),
     h('label', { class: 'field inline' }, h('span', { class: 'field-label' }, 'Constant-Q arcs'),
       h('select', { 'aria-label': 'Constant Q', onchange: (e: Event) => set({ qCircle: Number((e.target as HTMLSelectElement).value) }) },
         ...[0, 0.5, 1, 2, 3, 5, 10].map((q) => h('option', { value: String(q), selected: o.qCircle === q }, q === 0 ? 'Off' : `Q = ${q}`)))),
@@ -116,7 +122,7 @@ function renderStatus(g: Complex | null): void {
 const fmtHz = (f: number) => f >= 1e9 ? `${+(f / 1e9).toPrecision(5)} GHz` : f >= 1e6 ? `${+(f / 1e6).toPrecision(5)} MHz` : f >= 1e3 ? `${+(f / 1e3).toPrecision(5)} kHz` : `${f} Hz`;
 chart.onCursor = (g) => { renderStatus(g); inspect.setCursor(g); };
 
-const chartArea = h('section', { class: 'chart-area', 'aria-label': 'Smith chart' }, toolbar, layersPop, chart.root, zoomCtl, status);
+const chartArea = h('section', { class: 'chart-area', 'aria-label': 'Smith chart' }, toolbar, layersPop, chart.root, schematic.el, zoomCtl, status);
 
 /* ---------------- tabs ---------------- */
 type TabId = 'design' | 'inspect' | 'calc' | 'eq' | 'data';
@@ -218,6 +224,8 @@ function openHelp(): void {
       h('li', {}, h('kbd', {}, 'C'), ' Compass — press at a centre and drag a radius. Centred circles read |Γ|, SWR and return loss.'),
       h('li', {}, h('kbd', {}, 'A'), ' Protractor — drag radial lines; reads ∠Γ and wavelengths toward generator/load, and Δλ between radials.'),
       h('li', {}, h('kbd', {}, 'D'), ' Dividers — measure distances in the Γ plane.')),
+    h('h3', {}, 'Schematic strip'),
+    h('p', {}, 'Below the chart, the network is drawn from the load (left) to the source (right). Click an element to select it. Drag it sideways to reorder (on touch screens, press and hold first). With the keyboard, use Alt + ← / → to move the focused element.'),
     h('h3', {}, 'Shortcuts'),
     h('ul', {},
       h('li', {}, h('kbd', {}, 'Ctrl/⌘ Z'), ' undo · ', h('kbd', {}, 'Ctrl/⌘ ⇧ Z'), ' redo'),
@@ -226,6 +234,8 @@ function openHelp(): void {
       h('li', {}, 'Arrow keys nudge the load (Shift for larger steps) · ', h('kbd', {}, 'Delete'), ' removes the selected item')),
     h('h3', {}, 'Conventions'),
     h('p', {}, 'e^{+jωt} time convention; inductive reactance is in the upper half. Elements are ordered from the load toward the generator. Moving toward the generator on a line is a clockwise rotation (Pozar 2.42). Reference: D. M. Pozar, Microwave Engineering, 4th ed.'),
+    h('h3', {}, 'Versions'),
+    h('p', {}, 'The version badge next to the title lists earlier releases. Each one stays available at its own link and keeps its own saved work.'),
     h('form', { method: 'dialog' }, h('button', { class: 'btn primary', type: 'submit' }, 'Close')));
   document.body.append(dlg);
   dlg.addEventListener('close', () => dlg.remove());

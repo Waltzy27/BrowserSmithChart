@@ -2,7 +2,9 @@
 import { type Complex, abs, c, mul } from '../math/complex';
 import { gammaToZ, gammaMetrics } from '../math/smith';
 import { fix, formatRect } from '../math/units';
-import { parseTouchstone, serializeS1P, type Diagnostic } from '../io/touchstone';
+import { serializeS1P, type Diagnostic } from '../io/touchstone';
+import { parseTouchstoneAsync } from '../io/parseAsync';
+import { listProjects, saveProject, getProject, deleteProject, libraryAvailable, type LibraryEntry } from '../state/library';
 import { type Store, type AppState, type Trace, newId, serializeProject, loadProject } from '../state/store';
 import { derive, interpolateTrace, minReflectionIndex, bandAround } from '../state/derive';
 import { h, numField, toggle, rebuild, download, toast, svgIcon } from './dom';
@@ -37,7 +39,8 @@ export class DataPanel {
   setVisible(v: boolean): void { this.visible = v; if (v) this.render(); }
 
   async importText(text: string, name: string): Promise<void> {
-    const r = parseTouchstone(text, name);
+    if (text.length > 256 * 1024) toast(`Parsing ${name}…`);
+    const r = await parseTouchstoneAsync(text, name);
     lastDiagnostics = r.diagnostics;
     lastFile = name;
     if (!r.network) { toast(`Could not import ${name}`, 'error'); this.render(); return; }
@@ -65,7 +68,7 @@ export class DataPanel {
   }
 
   render(): void {
-    rebuild(this.el, () => [this.importCard(), this.tracesCard(), this.markersCard(), this.sweepCard(), this.exportCard()]);
+    rebuild(this.el, () => [this.importCard(), this.tracesCard(), this.markersCard(), this.sweepCard(), this.exportCard(), this.libraryCard()]);
     requestAnimationFrame(() => this.drawPlot());
   }
 
@@ -199,6 +202,41 @@ export class DataPanel {
         h('label', { for: 'proj-file', class: 'btn', role: 'button', tabindex: '0', onkeydown: (ev: Event) => { const e = ev as KeyboardEvent; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInput.click(); } } }, 'Open project…'), openInput,
       ),
       h('p', { class: 'hint' }, 'Projects autosave in this browser. Saved files are plain JSON and include imported data, the network, markers and constructions.'));
+  }
+
+  private library: LibraryEntry[] | null = null;
+  private libName = '';
+  private refreshLibrary(): void {
+    listProjects().then((l) => { this.library = l; if (this.visible) this.render(); }).catch(() => { this.library = []; });
+  }
+
+  private libraryCard(): HTMLElement {
+    if (!libraryAvailable()) return h('section', { class: 'card' }, h('h3', {}, 'Project library'), h('p', { class: 'hint' }, 'IndexedDB is not available in this browser (private mode?).'));
+    if (this.library === null) { this.library = []; this.refreshLibrary(); }
+    const nameInput = h('input', { class: 'num', type: 'text', placeholder: 'Project name', 'aria-label': 'Project name', value: this.libName, 'data-key': 'lib:name',
+      oninput: (e: Event) => { this.libName = (e.target as HTMLInputElement).value; } });
+    const save = async () => {
+      const name = this.libName.trim() || `Project ${new Date().toLocaleString()}`;
+      try { await saveProject(name, serializeProject(this.store.get())); toast(`Saved “${name}” to the library`); this.libName = ''; this.refreshLibrary(); }
+      catch (e) { toast(`Could not save: ${(e as Error).message}`, 'error'); }
+    };
+    const open = async (en: LibraryEntry) => {
+      try { const t = await getProject(en.id); if (!t) throw new Error('Not found'); this.store.replace(loadProject(t), false); toast(`Opened “${en.name}”`); }
+      catch (e) { toast((e as Error).message, 'error'); }
+    };
+    const del = async (en: LibraryEntry) => {
+      if (!window.confirm(`Delete “${en.name}” from the library?`)) return;
+      await deleteProject(en.id).catch(() => undefined); this.refreshLibrary();
+    };
+    const kb = (n: number) => (n > 1e6 ? `${fix(n / 1e6, 2)} MB` : `${fix(n / 1e3, 1)} kB`);
+    return h('section', { class: 'card' }, h('h3', {}, 'Project library'),
+      h('p', { class: 'hint' }, 'Named projects stored in this browser (IndexedDB), including large imported data.'),
+      h('div', { class: 'row lib-save' }, h('span', { class: 'field-input grow' }, nameInput), h('button', { type: 'button', class: 'btn primary', onclick: save }, 'Save')),
+      this.library.length ? h('ul', { class: 'lib-list' }, ...this.library.map((en) => h('li', {},
+        h('div', { class: 'lib-meta' }, h('strong', {}, en.name), h('span', { class: 'small mono' }, `${new Date(en.savedAt).toLocaleString()} · ${kb(en.size)}`)),
+        h('div', { class: 'row' },
+          h('button', { type: 'button', class: 'btn', onclick: () => open(en) }, 'Open'),
+          h('button', { type: 'button', class: 'btn danger', 'aria-label': `Delete ${en.name}`, onclick: () => del(en) }, 'Delete'))))) : h('p', { class: 'small' }, 'No saved projects yet.'));
   }
 
   private markersCSV(s: AppState): string {

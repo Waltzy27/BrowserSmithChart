@@ -66,6 +66,8 @@ const GROUPS: Array<{ name: string; eqs: Eq[] }> = [
     { title: 'Series element (move on constant r for reactance)', tex: 'z\\ \\to\\ z+\\frac{jX}{Z_0},\\qquad X_L=\\omega L,\\ X_C=-\\frac{1}{\\omega C}', ref: 'Pozar §5.1' },
     { title: 'Shunt element (move on constant g for susceptance)', tex: 'y\\ \\to\\ y+jBZ_0,\\qquad B_C=\\omega C,\\ B_L=-\\frac{1}{\\omega L}', ref: 'Pozar §5.1' },
     { title: 'Equivalent series / parallel model', tex: 'Z=R_s+jX_s,\\quad Y=G_p+jB_p,\\quad Q=\\frac{|X_s|}{R_s}=\\frac{|B_p|}{G_p}', ref: 'Circuit identity' },
+    { title: 'Non-ideal inductor (fixed ESR, parallel self-capacitance)', tex: 'R_s=\\frac{\\omega_0L}{Q_0},\\quad C_p=\\frac{1}{\\omega_s^2L},\\quad Z_L=\\frac{R_s+j\\omega L}{1+j\\omega C_p\\,(R_s+j\\omega L)}', ref: 'Component model (v0.2)', note: 'Q grows ∝ f with a fixed ESR; the impedance peaks (parallel resonance) at the SRF f_s = ω_s/2π. Below SRF the effective inductance is L/(1 − (f/f_s)²).' },
+    { title: 'Non-ideal capacitor (fixed ESR, series inductance)', tex: 'R_s=\\frac{1}{\\omega_0CQ_0},\\quad L_s=\\frac{1}{\\omega_s^2C},\\quad Z_C=R_s+j\\omega L_s+\\frac{1}{j\\omega C}', ref: 'Component model (v0.2)', note: 'At the SRF the reactance cancels and only the ESR remains; above it the capacitor looks inductive.' },
   ] },
   { name: 'Matching', eqs: [
     { title: 'L-section, z_L inside the r = 1 circle (shunt B first)', tex: 'B=\\frac{X_L\\pm\\sqrt{R_L/Z_0}\\sqrt{R_L^2+X_L^2-Z_0R_L}}{R_L^2+X_L^2},\\quad X=\\frac{1}{B}+\\frac{X_LZ_0}{R_L}-\\frac{Z_0}{BR_L}', ref: 'Pozar (5.3a,b)' },
@@ -73,6 +75,21 @@ const GROUPS: Array<{ name: string; eqs: Eq[] }> = [
     { title: 'Shunt single-stub position', tex: 't=\\tan\\beta d=\\frac{X_L\\pm\\sqrt{R_L\\left[(Z_0-R_L)^2+X_L^2\\right]/Z_0}}{R_L-Z_0},\\quad \\frac{d}{\\lambda}=\\begin{cases}\\frac{1}{2\\pi}\\tan^{-1}t & t\\ge0\\\\ \\frac{1}{2\\pi}(\\pi+\\tan^{-1}t)&t<0\\end{cases}', ref: 'Pozar (5.9), (5.10)' },
     { title: 'Stub lengths', tex: '\\frac{\\ell_{oc}}{\\lambda}=\\frac{1}{2\\pi}\\tan^{-1}\\frac{B_s}{Y_0},\\qquad \\frac{\\ell_{sc}}{\\lambda}=-\\frac{1}{2\\pi}\\tan^{-1}\\frac{Y_0}{B_s}\\quad(+\\tfrac{\\lambda}{2}\\text{ if negative})', ref: 'Pozar (5.11a,b); series stubs (5.16a,b)' },
     { title: 'Quarter-wave transformer', tex: 'Z_1=\\sqrt{Z_0R_L}', ref: 'Pozar (2.63)', note: 'For a complex load, first move along the line to a voltage maximum (R = Z0·SWR) or minimum (R = Z0/SWR).' },
+  ] },
+  { name: 'Pi and T networks', eqs: [
+    { title: 'Virtual resistance for a chosen loaded Q', tex: '\\text{Pi: }R_v=\\frac{R_{high}}{1+Q^2},\\qquad \\text{T: }R_v=R_{low}\\,(1+Q^2),\\qquad Q>Q_{min}=\\sqrt{\\frac{R_{high}}{R_{low}}-1}', ref: 'Two L-sections back to back', note: 'Each half is an L-section (5.3)/(5.6) to R_v; the two middle elements are combined. Q sets the node Q at the high-resistance end, and bandwidth ≈ f0/Q.' },
+  ] },
+  { name: 'Double- and triple-stub tuners', eqs: [
+    { title: 'Forbidden region', tex: '0\\le g_L\\le\\frac{1+t^2}{t^2}=\\frac{1}{\\sin^2\\beta d},\\qquad t=\\tan\\beta d', ref: 'Pozar (5.21)', note: 'The chart shows the g = 1 circle rotated d toward the load and the shaded region that cannot be matched with this spacing.' },
+    { title: 'First-stub susceptance', tex: 'B_1=-B_L+\\frac{Y_0\\pm\\sqrt{(1+t^2)G_LY_0-G_L^2t^2}}{t}', ref: 'Pozar (5.22)' },
+    { title: 'Second-stub susceptance', tex: 'B_2=\\frac{\\pm Y_0\\sqrt{Y_0G_L(1+t^2)-G_L^2t^2}+G_LY_0}{G_Lt}', ref: 'Pozar (5.23)', note: 'Stub lengths then follow from (5.24) = (5.11). The app also cascades the result and checks |Γin| = 0.' },
+    { title: 'Triple stub', tex: '\\text{choose }B_1:\\ g\\big(y_L+jB_1\\text{ moved by }d\\big)<\\frac{1}{\\sin^2\\beta d}\\ \\Rightarrow\\ \\text{double stub for stubs 2, 3}', ref: 'Extension of §5.3', note: 'The app searches stub-1 lengths and keeps the designs with the shortest total stub length.' },
+  ] },
+  { name: 'Multisection transformers', eqs: [
+    { title: 'Small-reflection theory', tex: '\\Gamma(\\theta)\\approx2e^{-jN\\theta}\\left[\\Gamma_0\\cos N\\theta+\\Gamma_1\\cos(N-2)\\theta+\\cdots\\right],\\quad \\Gamma_n\\approx\\tfrac12\\ln\\frac{Z_{n+1}}{Z_n}', ref: 'Pozar (5.46), (5.51)' },
+    { title: 'Binomial (maximally flat)', tex: '\\ln\\frac{Z_{n+1}}{Z_n}\\approx2^{-N}C_n^N\\ln\\frac{Z_L}{Z_0},\\qquad \\frac{\\Delta f}{f_0}=2-\\frac{4}{\\pi}\\cos^{-1}\\left[\\frac12\\left(\\frac{\\Gamma_m}{|A|}\\right)^{1/N}\\right]', ref: 'Pozar (5.53), (5.55)' },
+    { title: 'Chebyshev (equal ripple)', tex: '\\Gamma(\\theta)=Ae^{-jN\\theta}T_N(\\sec\\theta_m\\cos\\theta),\\quad \\sec\\theta_m=\\cosh\\left[\\frac1N\\cosh^{-1}\\left(\\frac{1}{2\\Gamma_m}\\left|\\ln\\frac{Z_L}{Z_0}\\right|\\right)\\right],\\quad \\frac{\\Delta f}{f_0}=2-\\frac{4\\theta_m}{\\pi}', ref: 'Pozar (5.61), (5.63), (5.64)' },
+    { title: 'Exact design (Tables 5.1, 5.2)', tex: '\\frac{|\\Gamma|^2}{1-|\\Gamma|^2}=k^2\\cos^{2N}\\theta\\ \\text{or}\\ k^2\\frac{T_N^2(\\sec\\theta_m\\cos\\theta)}{T_N^2(\\sec\\theta_m)},\\quad k^2=\\frac{(Z_L-Z_0)^2}{4Z_LZ_0}', ref: 'Insertion-loss form; solved numerically', note: 'Binomial exact values match Table 5.1 to 4 digits. Chebyshev N = 2 matches Table 5.2; for N ≥ 3 the app holds the ripple at exactly Γm, while the printed table values have ripple peaks between about 0.045 and 0.049 for Γm = 0.05 (checked by evaluating them), so they differ by under 0.5 %.' },
   ] },
 ];
 
@@ -116,10 +133,10 @@ export class EquationsPanel {
         const z0 = gammaToZ(g0), z1 = gammaToZ(g1), y0 = gammaToY(g0), y1 = gammaToY(g1);
         const lines: string[] = [];
         if (el.kind.startsWith('series') && el.kind !== 'stub') {
-          const ze = lumpedImmittance(el as Parameters<typeof lumpedImmittance>[0], s.f0, s.Z0);
+          const ze = lumpedImmittance(el as Parameters<typeof lumpedImmittance>[0], s.f0, s.Z0, s.f0);
           lines.push(`z_{${i + 1}}=z_{${i}}+z_e=(${cx(z0)})+(${cx(ze)})=${cx(z1)}`);
         } else if (el.kind.startsWith('shunt')) {
-          const ye = lumpedImmittance(el as Parameters<typeof lumpedImmittance>[0], s.f0, s.Z0);
+          const ye = lumpedImmittance(el as Parameters<typeof lumpedImmittance>[0], s.f0, s.Z0, s.f0);
           lines.push(`y_{${i + 1}}=y_{${i}}+y_e=(${cx(y0)})+(${cx(ye)})=${cx(y1)}`, `z_{${i + 1}}=1/y_{${i + 1}}=${cx(z1)}`);
         } else if (el.kind === 'line') {
           const gl = sectionGammaL(el.lengthWl, el.lossDb, s.f0, s.f0);

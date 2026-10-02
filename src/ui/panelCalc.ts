@@ -3,9 +3,12 @@ import { c, mul } from '../math/complex';
 import { gammaToZ, vswrToRho, returnLossToRho, mismatchLossToRho, gammaMetrics } from '../math/smith';
 import { fix, formatEngineering, wavelength } from '../math/units';
 import { elementLabel, type Element } from '../rf/network';
-import { synthesizeLMatches, synthesizeSingleStub, synthesizeQuarterWave, type MatchSolution } from '../rf/matching';
+import {
+  synthesizeLMatches, synthesizeSingleStub, synthesizeQuarterWave, synthesizePiT, piTMinQ,
+  synthesizeDoubleStub, synthesizeTripleStub, synthesizeMultisection, doubleStubGMax, type MatchSolution,
+} from '../rf/matching';
 import type { Store } from '../state/store';
-import { h, numField, segmented, rebuild, toast } from './dom';
+import { h, numField, segmented, selectField, rebuild, toast } from './dom';
 
 let rho = 0.5;
 let reactF: number | null = null;
@@ -13,7 +16,14 @@ let reactX = 50;
 let lineF: number | null = null;
 let lineVf = 0.66;
 let lineLenWl = 0.25;
-let matchMethod: 'L' | 'stub' | 'qw' = 'L';
+type Method = 'L' | 'pi' | 't' | 'stub' | 'dstub' | 'tstub' | 'qw' | 'multi';
+let matchMethod: Method = 'L';
+let netQ = 5;
+let dsSpacing = 0.125;
+let dsD0 = 0;
+let msKind: 'binomial' | 'chebyshev' = 'binomial';
+let msN = 3;
+let msGm = 0.05;
 let stubConn: 'shunt' | 'series' = 'shunt';
 let stubTerm: 'open' | 'short' = 'short';
 
@@ -85,11 +95,35 @@ export class CalcPanel {
     const ZL = mul(gammaToZ(s.load.gamma), c(s.Z0, 0));
     let sols: MatchSolution[] = [];
     let note = '';
+    let info = '';
+    const usesStubGuide = matchMethod === 'dstub' || matchMethod === 'tstub';
+    if (usesStubGuide !== (s.overlays.stubGuide > 0) || (usesStubGuide && s.overlays.stubGuide !== dsSpacing)) {
+      queueMicrotask(() => this.store.update((st) => ({ ...st, overlays: { ...st.overlays, stubGuide: usesStubGuide ? dsSpacing : 0 } }), false));
+    }
     if (!(ZL.re > 0) || !Number.isFinite(ZL.re)) note = 'Matching requires a load with positive, finite resistance.';
     else if (matchMethod === 'L') sols = synthesizeLMatches(ZL, s.Z0, s.f0);
-    else if (matchMethod === 'stub') sols = synthesizeSingleStub(ZL, s.Z0, s.f0, stubConn, stubTerm);
-    else sols = synthesizeQuarterWave(ZL, s.Z0, s.f0);
+    else if (matchMethod === 'pi' || matchMethod === 't') {
+      const qmin = piTMinQ(ZL.re, s.Z0);
+      info = `Q_min = √(R_high/R_low − 1) = ${fix(qmin, 4)} (an L-section). Higher Q → narrower bandwidth; BW ≈ f0/Q.`;
+      sols = synthesizePiT(ZL, s.Z0, s.f0, matchMethod, netQ);
+      if (!sols.length) note = `Q must exceed ${fix(qmin, 4)} for this load.`;
+    } else if (matchMethod === 'stub') sols = synthesizeSingleStub(ZL, s.Z0, s.f0, stubConn, stubTerm);
+    else if (matchMethod === 'dstub') {
+      const r = synthesizeDoubleStub(ZL, s.Z0, s.f0, dsSpacing, stubTerm, dsD0);
+      sols = r.solutions;
+      info = `g at stub 1 = ${fix(r.gAtStub1, 4)}; matchable while g ≤ 1/sin²βd = ${fix(r.gMax, 4)} (5.21). Chart shows the rotated g = 1 circle and the shaded forbidden region.`;
+      if (r.forbidden) note = 'The load is in the forbidden region for this spacing. Change d0 (e.g. add λ/8 or λ/4 of line before stub 1), change d, or use the triple-stub tuner.';
+    } else if (matchMethod === 'tstub') {
+      sols = synthesizeTripleStub(ZL, s.Z0, s.f0, dsSpacing, stubTerm, dsD0);
+      info = 'Stub 1 is chosen numerically so the admittance at stub 2 is safely outside the forbidden region; the remaining two stubs are a double-stub tuner. Shortest total stub length shown first.';
+    } else if (matchMethod === 'qw') sols = synthesizeQuarterWave(ZL, s.Z0, s.f0);
+    else {
+      sols = synthesizeMultisection(ZL, s.Z0, s.f0, msKind, msN, msGm);
+      info = 'Exact designs reproduce Pozar Tables 5.1/5.2 (exact equal-ripple/maximally flat response); small-reflection designs use (5.53) or (5.61)–(5.63). Complex loads are first moved to a voltage maximum or minimum.';
+      if (!sols.length && msKind === 'chebyshev') note = 'Γm is larger than the load mismatch itself; a single section (or none) is enough.';
+    }
     if (!note && !sols.length) note = Math.abs(ZL.re - s.Z0) < 1e-9 && Math.abs(ZL.im) < 1e-9 ? 'The load is already matched.' : 'No valid solution for this configuration.';
+    void doubleStubGMax;
     const apply = (sol: MatchSolution, append: boolean) => {
       const els = sol.elements.map((e) => ({ ...e })) as Element[];
       this.store.update((st) => ({ ...st, elements: append ? [...st.elements, ...els] : els, selection: { kind: 'input' } }));
@@ -98,10 +132,23 @@ export class CalcPanel {
     return h('section', { class: 'card' },
       h('h3', {}, 'Matching synthesis'),
       h('p', { class: 'hint' }, `Load ${fix(ZL.re, 2)} ${ZL.im < 0 ? '−' : '+'} j${fix(Math.abs(ZL.im), 2)} Ω → Z0 ${s.Z0} Ω at ${formatEngineering(s.f0, 'Hz', 4)}. Closed forms from Pozar Ch. 5; each candidate is verified by cascading it.`),
-      segmented('Method', [['L', 'L-section'], ['stub', 'Single stub'], ['qw', 'λ/4 transformer']], matchMethod, (v) => { matchMethod = v; this.render(); }, true),
+      selectField<Method>('Method', [['L', 'L-section (2 elements)'], ['pi', 'Pi network (chosen Q)'], ['t', 'T network (chosen Q)'], ['stub', 'Single stub'], ['dstub', 'Double stub'], ['tstub', 'Triple stub'], ['qw', 'λ/4 transformer'], ['multi', 'Multisection λ/4 (binomial / Chebyshev)']], matchMethod, (v) => { matchMethod = v; this.render(); }),
+      matchMethod === 'pi' || matchMethod === 't' ? h('div', { class: 'grid2' },
+        numField({ label: 'Loaded Q', value: netQ, key: 'c:q', min: 0.01, onCommit: (v) => { netQ = v; this.render(); } })) : null,
       matchMethod === 'stub' ? h('div', { class: 'row' },
         segmented('Stub connection', [['shunt', 'Shunt'], ['series', 'Series']], stubConn, (v) => { stubConn = v; this.render(); }, true),
         segmented('Stub termination', [['short', 'Short'], ['open', 'Open']], stubTerm, (v) => { stubTerm = v; this.render(); }, true)) : null,
+      matchMethod === 'dstub' || matchMethod === 'tstub' ? h('div', { class: 'stack' },
+        segmented('Stub termination', [['short', 'Short'], ['open', 'Open']], stubTerm, (v) => { stubTerm = v; this.render(); }, true),
+        h('div', { class: 'grid2' },
+          numField({ label: 'Stub spacing d', unit: 'λ', value: dsSpacing, key: 'c:dsd', min: 0.001, title: 'λ/8 and 3λ/8 are common; avoid 0 and λ/2', onCommit: (v) => { dsSpacing = v; this.render(); } }),
+          numField({ label: 'Load to stub 1, d0', unit: 'λ', value: dsD0, key: 'c:dsd0', min: 0, onCommit: (v) => { dsD0 = v; this.render(); } }))) : null,
+      matchMethod === 'multi' ? h('div', { class: 'stack' },
+        segmented('Response', [['binomial', 'Binomial'], ['chebyshev', 'Chebyshev']], msKind, (v) => { msKind = v; this.render(); }, true),
+        h('div', { class: 'grid2' },
+          numField({ label: 'Sections N (1–7)', value: msN, key: 'c:msn', min: 1, onCommit: (v) => { msN = Math.max(1, Math.min(7, Math.round(v))); this.render(); } }),
+          numField({ label: 'Max |Γ| in band, Γm', value: msGm, key: 'c:msg', min: 1e-4, onCommit: (v) => { msGm = Math.min(0.9, v); this.render(); } }))) : null,
+      info ? h('p', { class: 'hint' }, info) : null,
       note ? h('p', { class: 'hint warn' }, note) : null,
       ...sols.map((sol) => h('div', { class: 'solution' },
         h('div', { class: 'sol-head' }, h('strong', {}, sol.title)),
@@ -123,7 +170,7 @@ export function describeElement(e: Element, f0: number): string {
     case 'seriesC': case 'shuntC': return `${elementLabel[e.kind]} ${formatEngineering(e.value, 'F', 4)}`;
     case 'seriesR': case 'shuntR': return `${elementLabel[e.kind]} ${formatEngineering(e.value, 'Ω', 4)}`;
     case 'line': return `${e.label ?? 'Line'} Z0 = ${fix(e.z0, 3)} Ω, ℓ = ${fix(e.lengthWl, 4)} λ (${fix(e.lengthWl * 360, 2)}°)`;
-    case 'stub': return `${e.connection} ${e.termination} stub Z0 = ${fix(e.z0, 2)} Ω, ℓ = ${fix(e.lengthWl, 4)} λ (${fix(e.lengthWl * 360, 2)}°)`;
+    case 'stub': return `${e.label ? e.label + ': ' : ''}${e.connection} ${e.termination} stub Z0 = ${fix(e.z0, 2)} Ω, ℓ = ${fix(e.lengthWl, 4)} λ (${fix(e.lengthWl * 360, 2)}°)`;
     case 'transformer': return `Transformer n = ${fix(e.n, 4)}`;
   }
 }

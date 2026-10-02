@@ -129,7 +129,7 @@ export class ChartView {
   /* ---------------- rendering ---------------- */
   render(): void {
     const st = this.store.get();
-    const key = [this.w, this.h, this.view.cx, this.view.cy, this.view.zoom, st.gridMode, st.theme, st.overlays.scales, st.overlays.labels, st.overlays.qCircle, st.overlays.matchCircles].join('|');
+    const key = [this.w, this.h, this.view.cx, this.view.cy, this.view.zoom, st.gridMode, st.theme, st.overlays.scales, st.overlays.labels, st.overlays.qCircle, st.overlays.matchCircles, st.overlays.stubGuide].join('|');
     if (key !== this.staticKey) {
       this.gStatic.innerHTML = this.buildStatic(st);
       this.staticKey = key;
@@ -238,6 +238,19 @@ ${this.buildStatic(st)}${traces}${this.buildDynamic(st, true)}
       const r1 = resistanceCircle(1), g1 = conductanceCircle(1);
       out += this.circleEl(r1.cx, r1.cy, r1.r, p.guide, 1.6, 'stroke-dasharray="6 4"');
       out += this.circleEl(g1.cx, g1.cy, g1.r, p.guide, 1.6, 'stroke-dasharray="2 4"');
+    }
+    // Double-stub teaching aid (Pozar Fig. 5.8): g = 1 circle rotated d toward the load,
+    // and the forbidden region g > 1/sin²βd that no first-stub susceptance can rescue.
+    if (st.overlays.stubGuide > 0) {
+      const d = st.overlays.stubGuide;
+      const phi = 4 * Math.PI * d; // counter-clockwise = toward the load
+      out += this.circleEl(-0.5 * Math.cos(phi), -0.5 * Math.sin(phi), 0.5, p.shunt, 1.8, 'stroke-dasharray="7 4"');
+      const gmax = 1 / Math.sin(2 * Math.PI * d) ** 2;
+      if (Number.isFinite(gmax)) {
+        const fc = conductanceCircle(gmax);
+        const [fx, fy] = this.toPx(c(fc.cx, fc.cy));
+        out += `<circle cx="${fx}" cy="${fy}" r="${fc.r * this.s}" fill="${p.shunt}" fill-opacity="0.13" stroke="${p.shunt}" stroke-width="1" stroke-opacity="0.6"/>`;
+      }
     }
     if (st.overlays.qCircle > 0) {
       for (const up of [true, false]) {

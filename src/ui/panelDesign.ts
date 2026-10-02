@@ -2,7 +2,7 @@
 import { type Complex, c, mul, abs, arg, deg, fromPolar, rad } from '../math/complex';
 import { zToGamma, gammaToZ, gammaToY, yToGamma, gammaMetrics, normalizeZ } from '../math/smith';
 import { formatEngineering, fix, wavelength, formatRect } from '../math/units';
-import { type Element, type ElementKind, elementLabel, lumpedImmittance } from '../rf/network';
+import { type Element, type ElementKind, elementLabel, lumpedImmittance, componentImpedance, componentQ, isNonIdeal } from '../rf/network';
 import { type Store, type AppState, newId } from '../state/store';
 import { derive } from '../state/derive';
 import { rlText } from './readout';
@@ -176,13 +176,26 @@ export class DesignPanel {
       body.push(numField({ label: 'Turns ratio n (Z_in = n²·Z)', value: el.n, key: `${el.id}:n`, min: 1e-6, onCommit: (v) => upd({ n: v } as Partial<Element>) }));
     } else {
       const unit = el.kind.endsWith('R') ? 'Ω' : el.kind.endsWith('L') ? 'H' : 'F';
-      const imm = lumpedImmittance(el, s.f0, s.Z0);
+      const imm = lumpedImmittance(el, s.f0, s.Z0, s.f0);
       const series = el.kind.startsWith('series');
       body.push(h('div', { class: 'grid2' },
         numField({ label: 'Value', unit, value: el.value, key: `${el.id}:v`, engineering: true, min: 1e-30, onCommit: (v) => upd({ value: v } as Partial<Element>) }),
         h('div', { class: 'readonly' }, h('span', { class: 'field-label' }, series ? 'z added' : 'y added'),
           h('span', { class: 'mono' }, formatRect(imm, 4))),
       ));
+      if (unit !== 'Ω') {
+        const lossy = isNonIdeal(el);
+        const Zc = componentImpedance(el, s.f0, s.f0);
+        const q = componentQ(el, s.f0, s.f0);
+        body.push(h('details', { class: 'nonideal', open: lossy || undefined },
+          h('summary', {}, lossy ? `Non-ideal: Q ${Number.isFinite(q) ? fix(q, 3) : '∞'} at f0` : 'Non-ideal (Q, SRF)'),
+          h('div', { class: 'grid2' },
+            numField({ label: 'Unloaded Q at f0', value: el.q ?? 0, key: `${el.id}:q`, min: 0, title: '0 = lossless. Fixed ESR model: R = ωL/Q (L) or 1/(ωCQ) (C) at f0', onCommit: (v) => upd({ q: v > 0 ? v : undefined } as Partial<Element>) }),
+            numField({ label: 'Self-resonance SRF', unit: 'Hz', value: el.srf ?? 0, key: `${el.id}:srf`, engineering: true, min: 0, title: '0 = none. L: parallel Cp = 1/(ωs²L); C: series Ls = 1/(ωs²C)', onCommit: (v) => upd({ srf: v > 0 ? v : undefined } as Partial<Element>) }),
+            h('div', { class: 'readonly' }, h('span', { class: 'field-label' }, 'Component Z at f0'), h('span', { class: 'mono' }, formatRect(Zc, 4) + ' Ω')),
+            h('div', { class: 'readonly' }, h('span', { class: 'field-label' }, 'ESR'), h('span', { class: 'mono' }, formatEngineering(Zc.re, 'Ω', 4))),
+          )));
+      }
     }
     return h('li', { class: `el-card k-${colorClass(el)}${selected ? ' selected' : ''}`,
       onclick: (e: Event) => { if ((e.target as HTMLElement).closest('input,button,select')) return; this.set((st) => ({ ...st, selection: { kind: 'element', id: el.id } })); } },
