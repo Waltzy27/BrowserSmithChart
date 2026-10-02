@@ -1,0 +1,16 @@
+{
+  "name": "Smith Chart — Interactive RF Workbench",
+  "short_name": "Smith Chart",
+  "description": "Interactive Smith chart with digital compass and protractor, transmission lines, stubs, matching synthesis and Touchstone import.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#080c12",
+  "theme_color": "#0b1017",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
