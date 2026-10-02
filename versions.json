@@ -7,6 +7,13 @@
       "path": "v0.1",
       "date": "2026-10-02",
       "note": "First build: verified kernel, drafting tools, matching synthesis, Touchstone import"
+    },
+    {
+      "version": "0.2.0",
+      "tag": "v0.2.0",
+      "path": "v0.2",
+      "date": "2026-10-02",
+      "note": "Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library"
     }
   ]
 }
