@@ -2,17 +2,18 @@
 
 Version 0.1 is the first build: the analytic math kernel plus the interactive drafting layer. These add-ons are grouped by priority. Each one also lists the main design point to settle before building it.
 
-## Version 0.2 — finish the Phase 1 MVP
+## Version 0.2 — done (released as v0.2.0)
 
-| Add-on | Why | Design notes |
+| Add-on | Status | As built |
 | --- | --- | --- |
-| Drag-and-drop schematic strip | You can already reorder the chain with arrows. A small horizontal schematic would let users drag elements directly, so the topology is visible at a glance. | It should render from the same `elements[]` array as the chart, so the chain is still the only source of truth. |
-| Nonideal components | Real inductors and capacitors have finite Q and self-resonance. With finite Q, a "lossless" match turns into a spiral. | Add an optional `{ q, srf, esr }` per lumped element. Use Q(f) = Q0 at f0. The model for self-resonant frequency (SRF) is a series RLC (for an L, add a parallel C). Pozar §6.1 and vendor datasheets cover these models. |
-| Pi and T synthesis with a chosen loaded Q | This lets users set bandwidth on purpose. An L-section fixes Q at √(R_high/R_low − 1). | Build it as two L-sections back to back through a virtual resistance R_v = R_high/(1 + Q²) for a Pi, or the dual for a T. Draw the chosen Q arc on the chart. |
-| Double- and triple-stub tuners | Classic textbook content (Pozar §5.3). The "forbidden region" circle is a strong teaching aid. | Draw the rotated g = 1 circle. Show the forbidden region when y_L falls inside g > 1/sin²βd. |
-| Multi-section transformers | Binomial and Chebyshev (Pozar §5.6–5.8). Shows the trade-off between bandwidth and ripple. | It needs a small synthesis table for N ≤ 7. Check the results against Pozar Tables 5.1 and 5.2. |
-| IndexedDB project library | `localStorage` holds about 5 MB, and large Touchstone files do not fit. | Keep the current JSON schema (`browser-smith-chart` v1) and store the files in a key-value database. |
-| Web Worker for sweeps and import | Keeps the UI at 60 fps on 10k-point files and Monte Carlo runs. | The kernel is pure and DOM-free, so it can run in a worker with no changes. |
+| Drag-and-drop schematic strip | Done | `src/ui/schematic.ts`. It renders from `elements[]`. Reordering uses Pointer Events: mouse and pen drag right away, touch uses press-and-hold, and the keyboard uses Alt + ←/→. |
+| Non-ideal components | Done | Optional `q` (unloaded Q at f0, fixed-ESR model) and `srf` per L/C. Inductors get a parallel C_p = 1/(ω_s²L) and capacitors a series L_s = 1/(ω_s²C). Constraint drag is refined by Newton iteration. |
+| Pi and T synthesis with a chosen Q | Done | Virtual resistance R_v = R_high/(1 + Q²) for a Pi, or R_low(1 + Q²) for a T, built from two L-sections (5.3)/(5.6). Every solution is verified by cascade. |
+| Double- and triple-stub tuners | Done | Uses (5.21)–(5.24). The chart shows the rotated g = 1 circle and the forbidden region. The triple stub searches the stub-1 length numerically and keeps the shortest total stub length. |
+| Multi-section transformers | Done | Binomial and Chebyshev, N ≤ 7. Each comes as a small-reflection design (5.53)/(5.61)–(5.63) and an exact design, which fits the insertion-loss function by Levenberg–Marquardt. The exact designs match Tables 5.1/5.2. |
+| IndexedDB project library | Done | `src/state/library.ts`. Autosave falls back to IndexedDB when localStorage is full. The autosave key is now per version (`…:project:v2`), and older work migrates on first start. |
+| Web Worker for import | Done | Touchstone files over 256 kB are parsed in a module worker. Applying the network to a trace stays on the main thread, but is decimated while you drag (10k points × 6 elements ≈ 75 ms per full evaluation, measured). Moving that work to a worker is left for v0.3, alongside the optimizer and Monte Carlo. |
+| Version archive and menu | Done (added) | `versions.json`, `scripts/build-archives.mjs`, and the header badge. Every release stays live at `/vX.Y/`. |
 
 ## Version 0.3 — analysis tools
 

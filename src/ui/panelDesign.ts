@@ -187,18 +187,20 @@ export class DesignPanel {
         const lossy = isNonIdeal(el);
         const Zc = componentImpedance(el, s.f0, s.f0);
         const q = componentQ(el, s.f0, s.f0);
-        body.push(h('details', { class: 'nonideal', open: lossy || undefined },
+        const det = h('details', { class: 'nonideal', open: lossy || openNonIdeal.has(el.id) || undefined,
+          ontoggle: (e: Event) => { if ((e.target as HTMLDetailsElement).open) openNonIdeal.add(el.id); else openNonIdeal.delete(el.id); } },
           h('summary', {}, lossy ? `Non-ideal: Q ${Number.isFinite(q) ? fix(q, 3) : '∞'} at f0` : 'Non-ideal (Q, SRF)'),
           h('div', { class: 'grid2' },
             numField({ label: 'Unloaded Q at f0', value: el.q ?? 0, key: `${el.id}:q`, min: 0, title: '0 = lossless. Fixed ESR model: R = ωL/Q (L) or 1/(ωCQ) (C) at f0', onCommit: (v) => upd({ q: v > 0 ? v : undefined } as Partial<Element>) }),
-            numField({ label: 'Self-resonance SRF', unit: 'Hz', value: el.srf ?? 0, key: `${el.id}:srf`, engineering: true, min: 0, title: '0 = none. L: parallel Cp = 1/(ωs²L); C: series Ls = 1/(ωs²C)', onCommit: (v) => upd({ srf: v > 0 ? v : undefined } as Partial<Element>) }),
+            numField({ label: 'SRF', unit: 'Hz', value: el.srf ?? 0, key: `${el.id}:srf`, engineering: true, min: 0, title: '0 = none. L: parallel Cp = 1/(ωs²L); C: series Ls = 1/(ωs²C)', onCommit: (v) => upd({ srf: v > 0 ? v : undefined } as Partial<Element>) }),
             h('div', { class: 'readonly' }, h('span', { class: 'field-label' }, 'Component Z at f0'), h('span', { class: 'mono' }, formatRect(Zc, 4) + ' Ω')),
             h('div', { class: 'readonly' }, h('span', { class: 'field-label' }, 'ESR'), h('span', { class: 'mono' }, formatEngineering(Zc.re, 'Ω', 4))),
-          )));
+          ));
+        body.push(det);
       }
     }
     return h('li', { class: `el-card k-${colorClass(el)}${selected ? ' selected' : ''}`,
-      onclick: (e: Event) => { if ((e.target as HTMLElement).closest('input,button,select')) return; this.set((st) => ({ ...st, selection: { kind: 'element', id: el.id } })); } },
+      onclick: (e: Event) => { if ((e.target as HTMLElement).closest('input,button,select,summary,details')) return; this.set((st) => ({ ...st, selection: { kind: 'element', id: el.id } })); } },
       h('div', { class: 'el-head' },
         h('span', { class: 'badge' }, String(i + 1)),
         h('span', { class: 'el-name' }, el.label ?? (el.kind === 'stub' ? `${el.connection === 'shunt' ? 'Shunt' : 'Series'} ${el.termination} stub` : elementLabel[el.kind])),
@@ -210,6 +212,9 @@ export class DesignPanel {
     );
   }
 }
+
+/** Which element cards have the non-ideal section expanded (survives re-renders). */
+const openNonIdeal = new Set<string>();
 
 function colorClass(el: Element): string {
   if (el.kind === 'line') return 'line';

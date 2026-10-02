@@ -1,4 +1,5 @@
 /** Derived (computed) data for rendering and readouts, memoised on state identity. */
+import { isInteractive, INTERACTIVE_BUDGET } from './interactive';
 import { type Complex, c, abs, mul } from '../math/complex';
 import { gammaToZ, renormalizeGamma1Port, zToGamma, normalizeZ } from '../math/smith';
 import { cascade, elementPath, loadAtFrequency, type EvalContext } from '../rf/network';
@@ -22,7 +23,8 @@ let lastKey: unknown[] = [];
 let last: Derived | null = null;
 
 export function derive(s: AppState): Derived {
-  const key = [s.Z0, s.f0, s.load, s.elements, s.traces, s.sweep];
+  const fast = isInteractive();
+  const key = [s.Z0, s.f0, s.load, s.elements, s.traces, s.sweep, fast];
   if (last && key.every((k, i) => k === lastKey[i])) return last;
   const ctx: EvalContext = { f: s.f0, f0: s.f0, Z0: s.Z0 };
   const states = cascade(s.load.gamma, s.elements, ctx);
@@ -47,9 +49,25 @@ export function derive(s: AppState): Derived {
 
   const traces = s.traces.map((t) => {
     const g = t.z0 === s.Z0 ? t.gamma : t.gamma.map((x) => renormalizeGamma1Port(x, t.z0, s.Z0));
-    const applied = t.applyNetwork && s.elements.length
-      ? g.map((x, k) => { const st = cascade(x, s.elements, { f: t.freqs[k], f0: s.f0, Z0: s.Z0 }); return st[st.length - 1]; })
-      : null;
+    const at = (k: number) => { const st = cascade(g[k], s.elements, { f: t.freqs[k], f0: s.f0, Z0: s.Z0 }); return st[st.length - 1]; };
+    let applied: Complex[] | null = null;
+    if (t.applyNetwork && s.elements.length) {
+      const stride = fast ? Math.ceil((g.length * s.elements.length) / INTERACTIVE_BUDGET) : 1;
+      if (stride <= 1) applied = g.map((_, k) => at(k));
+      else {
+        // decimated evaluation, linear interpolation in between (display only, during drags)
+        applied = new Array<Complex>(g.length);
+        let prevK = 0, prevV = at(0);
+        applied[0] = prevV;
+        for (let k = stride; ; k += stride) {
+          const kk = Math.min(k, g.length - 1);
+          const v = at(kk);
+          for (let j = prevK + 1; j < kk; j++) { const u = (j - prevK) / (kk - prevK); applied[j] = c(prevV.re + (v.re - prevV.re) * u, prevV.im + (v.im - prevV.im) * u); }
+          applied[kk] = v; prevK = kk; prevV = v;
+          if (kk === g.length - 1) break;
+        }
+      }
+    }
     return { trace: t, gamma: g, applied };
   });
 

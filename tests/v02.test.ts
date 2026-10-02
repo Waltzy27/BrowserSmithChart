@@ -247,3 +247,30 @@ describe('documentation claims', () => {
     expect(b).toBeGreaterThan(0.045); expect(b).toBeLessThan(0.0495);
   });
 });
+
+describe('interactive decimation of applied traces', async () => {
+  const { defaultState } = await import('../src/state/store');
+  const { derive } = await import('../src/state/derive');
+  const { setInteractive } = await import('../src/state/interactive');
+  it('matches the exact applied trace at evaluated points and recomputes exactly when the drag ends', () => {
+    const s0 = defaultState();
+    const N = 5000;
+    const freqs = Array.from({ length: N }, (_, i) => 1e9 + i * 2e5);
+    const gamma = freqs.map((_, i) => c(0.4 * Math.cos(i / 200), 0.4 * Math.sin(i / 200)));
+    const els = [{ id: 'a', kind: 'seriesL', value: 4e-9 }, { id: 'b', kind: 'shuntC', value: 1e-12 }, { id: 'l', kind: 'line', z0: 50, lengthWl: 0.1, lossDb: 0, vf: 1 }];
+    const mk = () => ({ ...s0, elements: els.map((e) => ({ ...e })), traces: [{ id: 't', name: 't', param: 'S11', freqs, gamma, z0: 50, visible: true, applyNetwork: true, sourcePorts: 1, allParams: { S11: gamma } }], activeTraceId: 't' }) as never;
+    const full = derive(mk()).traces[0].applied!;
+    setInteractive(true);
+    const fast = derive(mk()).traces[0].applied!;
+    setInteractive(false);
+    expect(fast).toHaveLength(N);
+    const stride = Math.ceil((N * 3) / 12000);
+    for (let k = 0; k < N; k += stride) { close(fast[k].re, full[k].re, 1e-15); close(fast[k].im, full[k].im, 1e-15); }
+    close(fast[N - 1].re, full[N - 1].re, 1e-15);
+    // interpolation error is small for smooth data
+    let worst = 0; for (let k = 0; k < N; k++) worst = Math.max(worst, abs(c(fast[k].re - full[k].re, fast[k].im - full[k].im)));
+    expect(worst).toBeLessThan(0.01);
+    const again = derive(mk()).traces[0].applied!;
+    close(again[1].re, full[1].re, 1e-15);
+  });
+});

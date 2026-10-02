@@ -8,6 +8,7 @@ import { type Complex, c } from '../math/complex';
 import { zToGamma } from '../math/smith';
 import type { Element, LoadModel } from '../rf/network';
 import { kvSet, kvGet, libraryAvailable } from './library';
+import { setInteractive } from './interactive';
 
 declare const __APP_VERSION__: string;
 export const APP_VERSION: string = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
@@ -149,6 +150,7 @@ export class Store {
   beginGesture(): void {
     if (this.gestureBase) return;
     this.gestureBase = this.state;
+    setInteractive(true);
   }
   endGesture(): void {
     if (!this.gestureBase) return;
@@ -158,6 +160,11 @@ export class Store {
       this.future = [];
     }
     this.gestureBase = null;
+    setInteractive(false);
+    // re-emit so views recompute anything that was decimated during the drag
+    const prev = this.state;
+    this.state = { ...this.state };
+    this.emit(prev);
     this.scheduleSave();
   }
 

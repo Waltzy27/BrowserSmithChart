@@ -325,6 +325,10 @@ dialog.help form { margin-top: 18px; display: flex; justify-content: flex-end; }
 }
 @media (max-width: 480px) {
   .top-ctrls a.icon-btn { display: none; }
+  .brand { gap: 6px; }
+  .brand > svg { display: none; }
+  .version-badge { font-size: 9.5px; padding: 1px 5px; margin-left: 0; }
+  .version-pop { width: min(280px, calc(100vw - 16px)); }
 }
 @media (max-width: 420px) {
   .brand-name { font-size: var(--text-sm); }
@@ -341,7 +345,7 @@ details.nonideal[open] summary { color: var(--text); }
 /* ---------------- schematic strip ---------------- */
 .schematic { overflow-x: auto; overflow-y: hidden; border-top: 1px solid var(--border); background: var(--surface); scrollbar-width: thin; }
 .sch-track { display: flex; align-items: stretch; gap: 0; padding: 6px 10px; min-width: max-content; }
-.sch-el, .sch-end { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 2px 4px; border: 1px solid transparent; border-radius: var(--r-md); background: none; color: var(--text-muted); min-width: 68px; }
+.sch-el, .sch-end { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 2px 4px; border: 1px solid transparent; border-radius: var(--r-md); background: none; color: var(--text-muted); min-width: 68px; flex: none; }
 .sch-el { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; font: inherit; transition: transform .12s ease, margin .12s ease, background .12s; }
 .sch-el:hover { background: var(--surface-2); color: var(--text); }
 .sch-el:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -373,3 +377,5 @@ details.nonideal[open] summary { color: var(--text); }
 .lib-meta { display: flex; flex-direction: column; min-width: 0; }
 .lib-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn.danger { color: var(--danger); }
+.popover.version-pop { left: 0; right: auto; top: calc(100% + 8px); bottom: auto; width: min(280px, calc(100vw - 16px)); }
+.version-pop > a.small { color: var(--accent); }

@@ -58,7 +58,7 @@ function caption(el: Element): string {
     case 'seriesL': case 'shuntL': return formatEngineering(el.value, 'H', 3);
     case 'seriesC': case 'shuntC': return formatEngineering(el.value, 'F', 3);
     case 'line': return `${fix(el.z0, 1)}Ω ${fix(el.lengthWl, 3)}λ`;
-    case 'stub': return `${el.termination === 'short' ? 'S' : 'O'} ${fix(el.lengthWl, 3)}λ`;
+    case 'stub': return `${el.termination} ${fix(el.lengthWl, 3)}λ`;
     case 'transformer': return `n ${fix(el.n, 3)}`;
   }
 }

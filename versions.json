@@ -1,6 +1,12 @@
 {
-  "current": "0.2.0-dev",
+  "current": "0.2.0",
   "archived": [
-    { "version": "0.1.0", "tag": "v0.1.0", "path": "v0.1", "date": "2026-10-02", "note": "First build: verified kernel, drafting tools, matching synthesis, Touchstone import" }
+    {
+      "version": "0.1.0",
+      "tag": "v0.1.0",
+      "path": "v0.1",
+      "date": "2026-10-02",
+      "note": "First build: verified kernel, drafting tools, matching synthesis, Touchstone import"
+    }
   ]
 }
