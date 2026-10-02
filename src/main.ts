@@ -235,7 +235,7 @@ function openHelp(): void {
     h('h3', {}, 'Conventions'),
     h('p', {}, 'e^{+jωt} time convention; inductive reactance is in the upper half. Elements are ordered from the load toward the generator. Moving toward the generator on a line is a clockwise rotation (Pozar 2.42). Reference: D. M. Pozar, Microwave Engineering, 4th ed.'),
     h('h3', {}, 'Versions'),
-    h('p', {}, 'The version badge next to the title lists earlier releases. Each one stays available at its own link and keeps its own saved work.'),
+    h('p', {}, 'The version badge next to the title lists earlier releases. Each release stays available at its own link, and different versions keep their saved work separately.'),
     h('form', { method: 'dialog' }, h('button', { class: 'btn primary', type: 'submit' }, 'Close')));
   document.body.append(dlg);
   dlg.addEventListener('close', () => dlg.remove());

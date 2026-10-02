@@ -164,7 +164,7 @@ Each version has its own autosave key, and its service worker uses its own cache
 
 | Version | Link | Notes |
 | --- | --- | --- |
-| v0.2.0 (current) | [waltzy27.github.io/BrowserSmithChart](https://waltzy27.github.io/BrowserSmithChart/) · permanent: [/v0.2/](https://waltzy27.github.io/BrowserSmithChart/v0.2/) | Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library |
+| v0.2.1 (current) | [waltzy27.github.io/BrowserSmithChart](https://waltzy27.github.io/BrowserSmithChart/) · permanent: [/v0.2/](https://waltzy27.github.io/BrowserSmithChart/v0.2/) | Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library. 0.2.1 fixes the version menu labelling the permanent /v0.2/ link as archived. |
 | v0.1.0 | [waltzy27.github.io/BrowserSmithChart/v0.1/](https://waltzy27.github.io/BrowserSmithChart/v0.1/) | First build: verified kernel, drafting tools, L / single-stub / λ/4 matching, Touchstone import |
 
 Source for each release is available from its tag and on the [Releases](https://github.com/Waltzy27/BrowserSmithChart/releases) page.

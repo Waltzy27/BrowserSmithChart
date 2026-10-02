@@ -10,7 +10,10 @@ import { h } from './dom';
 interface VersionsFile { current: string; archived: Array<{ version: string; tag: string; path: string; date?: string; note?: string }>; }
 
 async function findManifest(): Promise<{ data: VersionsFile; base: URL; archived: boolean } | null> {
-  for (const [rel, archived] of [['./versions.json', false], ['../versions.json', true]] as const) {
+  // Archived copies live at <site>/vX.Y/; look one level up first there (avoids a 404).
+  const nested = /\/v\d+\.\d+\/(index\.html)?$/.test(location.pathname);
+  const order: Array<readonly [string, boolean]> = nested ? [['../versions.json', true], ['./versions.json', false]] : [['./versions.json', false], ['../versions.json', true]];
+  for (const [rel, archived] of order) {
     try {
       const url = new URL(rel, document.baseURI);
       const r = await fetch(url, { cache: 'no-cache' });
@@ -19,8 +22,10 @@ async function findManifest(): Promise<{ data: VersionsFile; base: URL; archived
       if (!data || !Array.isArray(data.archived)) continue;
       // An archived copy at ./ would also answer; the current build is the one whose
       // manifest lists it as current.
-      const isCurrentHere = !archived && data.current.replace(/-dev$/, '') === APP_VERSION;
-      return { data, base: new URL('.', url), archived: archived || (!isCurrentHere && data.archived.some((a) => a.version === APP_VERSION)) };
+      // A permanent /vX.Y/ copy of the current release is not "archived" yet.
+      const isCurrent = data.current.replace(/-dev$/, '') === APP_VERSION;
+      void archived;
+      return { data, base: new URL('.', url), archived: !isCurrent };
     } catch { /* offline or file:// */ }
   }
   return null;
@@ -45,7 +50,8 @@ export function versionBadge(): HTMLElement {
       rows.push(h('a', { class: `ver-row${m.archived && a.version === APP_VERSION ? ' on' : ''}`, href: new URL(`${a.path}/`, m.base).href },
         h('strong', {}, `v${a.version}`), h('span', { class: 'small' }, [a.date, a.note].filter(Boolean).join(' · '))));
     }
-    const warn = m.archived ? [h('p', { class: 'small warn' }, `You are using archived v${APP_VERSION}. Its saved work is kept separately from the current version.`)] : [];
+    const cur = m.data.current.replace(/-dev$/, '');
+    const warn = m.archived ? [h('p', { class: 'small warn' }, `You are using archived v${APP_VERSION}. The current version is v${cur}; saved work is kept separately for each version.`)] : [];
     pop.replaceChildren(h('h4', {}, 'Versions'), ...warn, ...rows,
       h('a', { class: 'small', href: 'https://github.com/Waltzy27/BrowserSmithChart/releases', target: '_blank', rel: 'noopener' }, 'Release notes on GitHub'));
   });

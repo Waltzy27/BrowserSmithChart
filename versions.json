@@ -1,5 +1,5 @@
 {
-  "current": "0.2.0",
+  "current": "0.2.1",
   "archived": [
     {
       "version": "0.1.0",
@@ -9,11 +9,11 @@
       "note": "First build: verified kernel, drafting tools, matching synthesis, Touchstone import"
     },
     {
-      "version": "0.2.0",
-      "tag": "v0.2.0",
+      "version": "0.2.1",
+      "tag": "v0.2.1",
       "path": "v0.2",
       "date": "2026-10-02",
-      "note": "Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library"
+      "note": "Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library (0.2.1: version-menu fix)"
     }
   ]
 }

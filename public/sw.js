@@ -7,7 +7,7 @@
  *    with this worker's own prefix (never another version's cache, e.g. v0.1's "bsc-v1");
  *  - requests for a nested archived version (<scope>vX.Y/…) are left to that version.
  */
-const APP = 'v0.2.0';
+const APP = 'v0.2.1';
 const SCOPE = self.registration.scope;
 const PREFIX = `bsc:${SCOPE}:`;
 const CACHE = PREFIX + APP;
