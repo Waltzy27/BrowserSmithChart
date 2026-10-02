@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # tags are needed to rebuild archived versions
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -28,6 +30,8 @@ jobs:
         run: npm test
       - name: Type-check and build
         run: npm run build
+      - name: Rebuild archived versions at permanent paths (versions.json)
+        run: node scripts/build-archives.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
