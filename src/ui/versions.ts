@@ -10,6 +10,7 @@ import { h } from './dom';
 interface VersionsFile { current: string; archived: Array<{ version: string; tag: string; path: string; date?: string; note?: string }>; }
 
 async function findManifest(): Promise<{ data: VersionsFile; base: URL; archived: boolean } | null> {
+  if (location.protocol === 'file:') return null; // offline single-file copy: nothing to fetch
   // Archived copies live at <site>/vX.Y/; look one level up first there (avoids a 404).
   const nested = /\/v\d+\.\d+\/(index\.html)?$/.test(location.pathname);
   const order: Array<readonly [string, boolean]> = nested ? [['../versions.json', true], ['./versions.json', false]] : [['./versions.json', false], ['../versions.json', true]];
@@ -42,7 +43,14 @@ export function versionBadge(): HTMLElement {
     pop.hidden = false; btn.setAttribute('aria-expanded', 'true');
     pop.replaceChildren(h('h4', {}, 'Versions'), h('p', { class: 'small' }, 'Loading…'));
     const m = await findManifest();
-    if (!m) { pop.replaceChildren(h('h4', {}, 'Versions'), h('p', { class: 'small' }, `This is v${APP_VERSION}. The version list is unavailable offline.`)); return; }
+    if (!m) {
+      const local = location.protocol === 'file:';
+      pop.replaceChildren(h('h4', {}, 'Versions'),
+        h('p', { class: 'small' }, local ? `Offline copy of v${APP_VERSION}, running from a file on this computer.` : `This is v${APP_VERSION}. The version list is unavailable offline.`),
+        h('a', { class: 'small', href: 'https://waltzy27.github.io/BrowserSmithChart/', target: '_blank', rel: 'noopener' }, 'Online version'),
+        h('a', { class: 'small', href: 'https://github.com/Waltzy27/BrowserSmithChart/releases', target: '_blank', rel: 'noopener' }, 'Download other versions'));
+      return;
+    }
     const rows: HTMLElement[] = [];
     rows.push(h('a', { class: `ver-row${m.archived ? '' : ' on'}`, href: m.base.href }, h('strong', {}, `v${m.data.current.replace(/-dev$/, '')}`), h('span', { class: 'small' }, 'current')));
     for (const a of [...m.data.archived].reverse()) {

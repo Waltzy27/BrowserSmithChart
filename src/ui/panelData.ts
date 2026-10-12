@@ -78,7 +78,16 @@ export class DataPanel {
     const ex = h('select', { 'aria-label': 'Example data files', onchange: async (e: Event) => {
       const v = (e.target as HTMLSelectElement).value;
       if (!v) return;
-      try { const r = await fetch(`./examples/${v}`); if (!r.ok) throw new Error(String(r.status)); await this.importText(await r.text(), v); }
+      try {
+        if (import.meta.env.MODE === 'offline') {
+          const { EMBEDDED_EXAMPLES } = await import('../io/embeddedExamples');
+          const t = EMBEDDED_EXAMPLES[v];
+          if (t === undefined) throw new Error('missing');
+          await this.importText(t, v);
+        } else {
+          const r = await fetch(`./examples/${v}`); if (!r.ok) throw new Error(String(r.status)); await this.importText(await r.text(), v);
+        }
+      }
       catch { toast('Could not load the example file.', 'error'); }
     } }, h('option', { value: '' }, 'Load an example file…'), ...EXAMPLES.map(([f, l]) => h('option', { value: f }, l)));
     return h('section', { class: 'card' },

@@ -13,7 +13,8 @@ const pending = new Map<number, { resolve: (r: ParseResult) => void; reject: (e:
 
 function getWorker(): Worker | null {
   if (worker) return worker;
-  if (typeof Worker === 'undefined') return null;
+  // The single-file offline build runs from file://, where module workers cannot load.
+  if (import.meta.env.MODE === 'offline' || typeof Worker === 'undefined') return null;
   try {
     worker = new Worker(new URL('./touchstone.worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (e: MessageEvent<{ id: number; result?: ParseResult; error?: string }>) => {

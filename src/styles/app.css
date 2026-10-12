@@ -379,3 +379,4 @@ details.nonideal[open] summary { color: var(--text); }
 .btn.danger { color: var(--danger); }
 .popover.version-pop { left: 0; right: auto; top: calc(100% + 8px); bottom: auto; width: min(280px, calc(100vw - 16px)); }
 .version-pop > a.small { color: var(--accent); }
+.version-pop > p.small { margin: 0 0 4px; color: var(--text-muted); }

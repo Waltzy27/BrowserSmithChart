@@ -4,6 +4,8 @@
 
 Previous versions stay online at their own links (see [Previous versions](#previous-versions)).
 
+**Offline download → [latest release](https://github.com/Waltzy27/BrowserSmithChart/releases/latest)**. This is one HTML file you double-click; it needs no internet and nothing installed. See [Run offline](#run-offline).
+
 An interactive Smith chart that runs in any modern browser, on desktop and on phones. It works like a paper chart: place a load, use a compass and protractor, rotate along lines, and add series or shunt reactance along the correct contours. It also does the math and shows every equation with live numbers. Nothing to install. It works offline once loaded, and you can install it as an app (PWA).
 
 ## New in v0.2
@@ -143,6 +145,34 @@ tests/    Vitest suites + scikit-rf golden fixtures (scripts/make_fixtures.py)
 - **Constraint drag.** Dragging a point solves for the element value that lands nearest the pointer on that element's contour. A series L stays on its constant-r circle; a line stays on its SWR circle or spiral.
 - **Rendering.** The static grid is cached as SVG. Dense traces are drawn on canvas. Interactive overlays use SVG with Pointer Events (mouse, pen, and touch).
 
+## Run offline
+
+Every release has three downloads attached:
+
+| File | What it is |
+| --- | --- |
+| `BrowserSmithChart-<ver>-offline.html` | The whole app in one file: code, fonts, equations, and example data. Double-click it to open it in your browser. |
+| `BrowserSmithChart-<ver>-linux-offline.zip` | The same file, plus an icon, an app-menu launcher, and a README. |
+| `BrowserSmithChart-<ver>-linux-offline.tar.gz` | The same as the zip, in a format that keeps the scripts' run permissions. |
+
+**On Pop!_OS (or any Linux desktop):**
+1. Download the `.zip` from the [latest release](https://github.com/Waltzy27/BrowserSmithChart/releases/latest).
+2. Extract it.
+3. Double-click `BrowserSmithChart.html`. It opens in Firefox and runs with no internet connection.
+4. Optional: add it to the app menu.
+   ```bash
+   cd ~/Downloads/BrowserSmithChart-*-linux-offline
+   bash install-launcher.sh      # then press Super and search "Smith Chart"
+   ```
+   The launcher copies the app to `~/.local/share/browser-smith-chart`, so you can delete the download afterwards. No root access is needed. To remove it, run `bash uninstall-launcher.sh`.
+
+How the offline copy differs from the online one:
+- Saved work stays in the browser's storage for that one file. To move work between copies or machines, use **Data → Save project** and **Open project**.
+- Large Touchstone files are parsed on the main thread, because browsers do not allow background workers in files opened from disk.
+- The version menu links to the online version instead of listing other versions.
+
+To build the offline files yourself, run `npm run build:offline`. The output goes to `release/`.
+
 ## Run locally
 
 ```bash
@@ -164,7 +194,7 @@ Each version has its own autosave key, and its service worker uses its own cache
 
 | Version | Link | Notes |
 | --- | --- | --- |
-| v0.2.1 (current) | [waltzy27.github.io/BrowserSmithChart](https://waltzy27.github.io/BrowserSmithChart/) · permanent: [/v0.2/](https://waltzy27.github.io/BrowserSmithChart/v0.2/) | Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library. 0.2.1 fixes the version menu labelling the permanent /v0.2/ link as archived. |
+| v0.2.2 (current) | [waltzy27.github.io/BrowserSmithChart](https://waltzy27.github.io/BrowserSmithChart/) · permanent: [/v0.2/](https://waltzy27.github.io/BrowserSmithChart/v0.2/) | Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library. 0.2.1 fixes the version menu labelling the permanent /v0.2/ link as archived; 0.2.2 adds the offline download. |
 | v0.1.0 | [waltzy27.github.io/BrowserSmithChart/v0.1/](https://waltzy27.github.io/BrowserSmithChart/v0.1/) | First build: verified kernel, drafting tools, L / single-stub / λ/4 matching, Touchstone import |
 
 Source for each release is available from its tag and on the [Releases](https://github.com/Waltzy27/BrowserSmithChart/releases) page.

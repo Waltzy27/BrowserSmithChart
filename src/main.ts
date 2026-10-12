@@ -236,6 +236,7 @@ function openHelp(): void {
     h('p', {}, 'e^{+jωt} time convention; inductive reactance is in the upper half. Elements are ordered from the load toward the generator. Moving toward the generator on a line is a clockwise rotation (Pozar 2.42). Reference: D. M. Pozar, Microwave Engineering, 4th ed.'),
     h('h3', {}, 'Versions'),
     h('p', {}, 'The version badge next to the title lists earlier releases. Each release stays available at its own link, and different versions keep their saved work separately.'),
+    h('p', {}, 'To use the app with no internet, download the offline file from the ', h('a', { href: 'https://github.com/Waltzy27/BrowserSmithChart/releases/latest', target: '_blank', rel: 'noopener' }, 'latest release'), ' and double-click it.'),
     h('form', { method: 'dialog' }, h('button', { class: 'btn primary', type: 'submit' }, 'Close')));
   document.body.append(dlg);
   dlg.addEventListener('close', () => dlg.remove());
@@ -243,7 +244,8 @@ function openHelp(): void {
 }
 
 /* ---------------- offline / PWA ---------------- */
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// Not in the offline single-file build: service workers need http(s), and file:// is already offline.
+if ('serviceWorker' in navigator && import.meta.env.PROD && import.meta.env.MODE !== 'offline' && location.protocol !== 'file:') {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').then((reg) => {
       reg.addEventListener('updatefound', () => {

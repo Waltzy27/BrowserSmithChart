@@ -1,0 +1,42 @@
+name: Attach offline download to the release
+
+# For every version tag, build the single-file offline app and attach it to the
+# GitHub release (creating the release if it does not exist yet):
+#   BrowserSmithChart-<ver>-offline.html          one file, double-click to run
+#   BrowserSmithChart-<ver>-linux-offline.zip     + icon, app-menu launcher, README
+#   BrowserSmithChart-<ver>-linux-offline.tar.gz  (same, preserves permissions)
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)build assets for
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Verify math kernel
+        run: npm test
+      - name: Build single-file offline app and Linux package
+        run: npm run build:offline
+      - name: Upload to release
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "Offline downloads are attached below."
+          gh release upload "$TAG" release/*.html release/*.zip release/*.tar.gz --clobber
