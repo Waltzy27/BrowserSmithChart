@@ -9,6 +9,9 @@ import { zToGamma } from '../math/smith';
 import type { Element, LoadModel } from '../rf/network';
 import { kvSet, kvGet, libraryAvailable } from './library';
 import { setInteractive } from './interactive';
+import { STACKUP_PRESETS, type Stackup } from '../tl/stackup';
+import { substrateError } from '../tl/microstrip';
+import type { StubPart, StubTerm } from '../tl/stub';
 
 declare const __APP_VERSION__: string;
 export const APP_VERSION: string = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
@@ -45,8 +48,42 @@ export type Selection =
   | { kind: 'construction'; id: string }
   | { kind: 'none' };
 
+/** Workspace mode: the Smith chart, or the LineCalc microstrip calculator. */
+export type AppMode = 'smith' | 'linecalc';
+
+/** LineCalc inputs (SI units). Frequency and the reference Z0 are the shared f0 and Z0. */
+export interface LineCalcState {
+  stackup: Stackup;
+  /** Which width field is the input: W (Z0 solved) or Z0 (W solved). */
+  widthGiven: 'W' | 'Z0';
+  W: number;
+  z0Target: number;
+  /** Which length field is the input: physical L (θ solved) or angle θ (L solved). */
+  lengthGiven: 'L' | 'angle';
+  L: number;
+  angleDeg: number;
+  stub: { part: StubPart; values: Record<StubPart, number>; term: StubTerm; conn: 'shunt' | 'series'; z0: number };
+  qw: { zs: number; zl: number };
+  /** Set by "Microstrip dimensions" on a chart element, so LineCalc can show where the values came from. */
+  origin: { kind: 'line' | 'stub'; term?: StubTerm; label: string } | null;
+}
+
+export function defaultLineCalc(): LineCalcState {
+  return {
+    stackup: { ...STACKUP_PRESETS[2] },
+    widthGiven: 'Z0', W: 1.1e-3, z0Target: 50,
+    lengthGiven: 'angle', L: 10e-3, angleDeg: 90,
+    stub: { part: 'L', values: { L: 2e-9, C: 1e-12, X: 25 }, term: 'short', conn: 'shunt', z0: 50 },
+    qw: { zs: 50, zl: 100 },
+    origin: null,
+  };
+}
+
 export interface AppState {
-  schema: 1;
+  /** 1 = v0.1–v0.2.x, 2 = v0.3 (adds mode and lineCalc). */
+  schema: 2;
+  mode: AppMode;
+  lineCalc: LineCalcState;
   Z0: number;
   f0: number;
   load: { gamma: Complex; model: LoadModel };
@@ -80,7 +117,9 @@ export function defaultState(): AppState {
   // Pozar Example 5.1 load (200 − j100 Ω at 500 MHz, Z0 = 100 Ω) would be one choice;
   // the default uses a familiar 50 Ω problem from Example 5.2.
   return {
-    schema: 1,
+    schema: 2,
+    mode: 'smith',
+    lineCalc: defaultLineCalc(),
     Z0: 50,
     f0: 2e9,
     load: { gamma: zToGamma(c(1.2, -1.6)), model: 'series' },
@@ -106,13 +145,13 @@ type Listener = (s: AppState, prev: AppState) => void;
  * (e.g. /v0.1/) and the current one never overwrite each other's work; on first
  * start the newest older key is migrated.
  */
-const STORAGE_KEY = 'browser-smith-chart:project:v2';
-const LEGACY_KEYS = ['browser-smith-chart:project:v1'];
+const STORAGE_KEY = 'browser-smith-chart:project:v3';
+const LEGACY_KEYS = ['browser-smith-chart:project:v2', 'browser-smith-chart:project:v1'];
 const IDB_FLAG = 'browser-smith-chart:autosave-in-idb';
 const MAX_HISTORY = 150;
 
 /** Keys whose changes are view-only and should not create undo steps. */
-const TRANSIENT: ReadonlyArray<keyof AppState> = ['tool', 'selection', 'theme'];
+const TRANSIENT: ReadonlyArray<keyof AppState> = ['tool', 'selection', 'theme', 'mode'];
 
 export class Store {
   private state: AppState;
@@ -176,7 +215,7 @@ export class Store {
     if (!p) return;
     const prev = this.state;
     this.future.push(prev);
-    this.state = { ...p, tool: prev.tool, theme: prev.theme };
+    this.state = { ...p, tool: prev.tool, theme: prev.theme, mode: prev.mode };
     this.emit(prev);
   }
   redo(): void {
@@ -184,7 +223,7 @@ export class Store {
     if (!n) return;
     const prev = this.state;
     this.past.push(prev);
-    this.state = { ...n, tool: prev.tool, theme: prev.theme };
+    this.state = { ...n, tool: prev.tool, theme: prev.theme, mode: prev.mode };
     this.emit(prev);
   }
 
@@ -242,6 +281,40 @@ const toC = (v: unknown): Complex => {
   return c(isNum(o?.re) ? o.re : 0, isNum(o?.im) ? o.im : 0);
 };
 
+const pos = (v: unknown, d: number): number => (isNum(v) && v > 0 ? v : d);
+const oneOf = <T extends string>(v: unknown, opts: readonly T[], d: T): T => (opts.includes(v as T) ? (v as T) : d);
+
+/** Validate LineCalc state; schema-1 projects have none and get the defaults. */
+function migrateLineCalc(v: unknown): LineCalcState {
+  const d = defaultLineCalc();
+  if (!v || typeof v !== 'object') return d;
+  const o = v as Partial<LineCalcState>;
+  const st = (o.stackup ?? {}) as Partial<Stackup>;
+  const stackup: Stackup = {
+    name: typeof st.name === 'string' ? st.name.slice(0, 80) : d.stackup.name,
+    er: isNum(st.er) ? st.er : d.stackup.er, h: isNum(st.h) ? st.h : d.stackup.h, t: isNum(st.t) ? st.t : d.stackup.t,
+    tanD: isNum(st.tanD) ? st.tanD : d.stackup.tanD, sigma: isNum(st.sigma) ? st.sigma : d.stackup.sigma, rough: isNum(st.rough) ? st.rough : 0,
+  };
+  const sb = (o.stub ?? {}) as Partial<LineCalcState['stub']>;
+  const vals = (sb.values ?? {}) as Partial<Record<StubPart, number>>;
+  return {
+    stackup: substrateError(stackup) ? d.stackup : stackup,
+    widthGiven: oneOf(o.widthGiven, ['W', 'Z0'] as const, d.widthGiven),
+    W: pos(o.W, d.W), z0Target: pos(o.z0Target, d.z0Target),
+    lengthGiven: oneOf(o.lengthGiven, ['L', 'angle'] as const, d.lengthGiven),
+    L: isNum(o.L) && o.L >= 0 ? o.L : d.L, angleDeg: isNum(o.angleDeg) && o.angleDeg >= 0 ? o.angleDeg : d.angleDeg,
+    stub: {
+      part: oneOf(sb.part, ['L', 'C', 'X'] as const, d.stub.part),
+      values: { L: pos(vals.L, d.stub.values.L), C: pos(vals.C, d.stub.values.C), X: isNum(vals.X) && vals.X !== 0 ? vals.X : d.stub.values.X },
+      term: oneOf(sb.term, ['open', 'short'] as const, d.stub.term),
+      conn: oneOf(sb.conn, ['shunt', 'series'] as const, d.stub.conn),
+      z0: pos(sb.z0, d.stub.z0),
+    },
+    qw: { zs: pos(o.qw?.zs, d.qw.zs), zl: pos(o.qw?.zl, d.qw.zl) },
+    origin: null,
+  };
+}
+
 /** Validate and migrate an untrusted project JSON string. Throws with a readable message. */
 export function loadProject(text: string): AppState {
   let raw: unknown;
@@ -250,8 +323,12 @@ export function loadProject(text: string): AppState {
   if (obj?.format !== PROJECT_FORMAT || !obj.state) throw new Error('This file is not a Browser Smith Chart project.');
   const d = defaultState();
   const s = obj.state;
+  // schema 1 (v0.1–v0.2.x) → 2: add mode and lineCalc; everything else is unchanged.
   const out: AppState = {
     ...d,
+    schema: 2,
+    mode: oneOf(s.mode, ['smith', 'linecalc'] as const, 'smith'),
+    lineCalc: migrateLineCalc(s.lineCalc),
     Z0: isNum(s.Z0) && s.Z0 > 0 ? s.Z0 : d.Z0,
     f0: isNum(s.f0) && s.f0 > 0 ? s.f0 : d.f0,
     load: { gamma: toC(s.load?.gamma), model: (['constant', 'series', 'parallel'] as const).includes(s.load?.model as LoadModel) ? (s.load!.model as LoadModel) : 'constant' },

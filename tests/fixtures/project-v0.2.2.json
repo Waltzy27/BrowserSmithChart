@@ -1,0 +1,124 @@
+{
+  "format": "browser-smith-chart-project",
+  "app": "0.2.2",
+  "savedAt": "2026-11-27T18:33:50.723Z",
+  "state": {
+    "schema": 1,
+    "Z0": 75,
+    "f0": 1500000000,
+    "load": {
+      "gamma": {
+        "re": 0.31,
+        "im": -0.42
+      },
+      "model": "parallel"
+    },
+    "elements": [
+      {
+        "id": "e1",
+        "kind": "seriesL",
+        "value": 3.3e-9,
+        "q": 45,
+        "srf": 6000000000
+      },
+      {
+        "id": "e2",
+        "kind": "shuntC",
+        "value": 1.2e-12
+      },
+      {
+        "id": "e3",
+        "kind": "line",
+        "z0": 60,
+        "lengthWl": 0.137,
+        "lossDb": 0.05,
+        "vf": 0.7,
+        "label": "Feed"
+      },
+      {
+        "id": "e4",
+        "kind": "stub",
+        "z0": 50,
+        "lengthWl": 0.21,
+        "lossDb": 0,
+        "vf": 1,
+        "termination": "open",
+        "connection": "shunt"
+      },
+      {
+        "id": "e5",
+        "kind": "transformer",
+        "n": 1.3
+      }
+    ],
+    "constructions": [
+      {
+        "id": "k1",
+        "type": "circle",
+        "cx": 0,
+        "cy": 0,
+        "r": 0.4
+      },
+      {
+        "id": "k2",
+        "type": "radial",
+        "angle": 1.1
+      }
+    ],
+    "traces": [
+      {
+        "id": "t1",
+        "name": "meas.s1p",
+        "param": "S11",
+        "freqs": [
+          1000000000,
+          1500000000,
+          2000000000
+        ],
+        "gamma": [
+          {
+            "re": 0.1,
+            "im": 0.2
+          },
+          {
+            "re": 0,
+            "im": -0.1
+          },
+          {
+            "re": -0.2,
+            "im": 0.05
+          }
+        ],
+        "z0": 50,
+        "visible": true,
+        "applyNetwork": false,
+        "sourcePorts": 1
+      }
+    ],
+    "markers": [
+      {
+        "id": "m1",
+        "traceId": "t1",
+        "f": 1500000000
+      }
+    ],
+    "activeTraceId": "t1",
+    "gridMode": "Y",
+    "overlays": {
+      "vswrCircle": true,
+      "matchCircles": false,
+      "qCircle": 2,
+      "scales": true,
+      "paperY": true,
+      "labels": true,
+      "stubGuide": 0.125
+    },
+    "sweep": {
+      "enabled": true,
+      "spanPct": 30,
+      "points": 101
+    },
+    "snap": "grid",
+    "theme": "light"
+  }
+}
