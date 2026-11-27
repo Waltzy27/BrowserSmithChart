@@ -7,6 +7,25 @@ import type { Store, AppState } from '../state/store';
 import { derive } from '../state/derive';
 import { h, rebuild } from './dom';
 import { selectedPoint } from './panelInspect';
+import { ETA0, NP_TO_DB, z01, eeffHJ, openEndExtension, openEndHB } from '../tl/microstrip';
+import { solveLine, type LineSolution } from '../tl/linecalc';
+import { designStub, targetReactance } from '../tl/stub';
+import { quarterWaveMicrostrip } from '../tl/helpers';
+
+/** LineCalc line solution for the Equations tab, cached per state. */
+let lcCache: { key: unknown; f0: number; r: LineSolution | null } | null = null;
+const lcLine = (s: AppState): LineSolution | null => {
+  if (lcCache && lcCache.key === s.lineCalc && lcCache.f0 === s.f0) return lcCache.r;
+  const r = solveLine(s.lineCalc, s.f0);
+  lcCache = { key: s.lineCalc, f0: s.f0, r: r.ok ? r : null };
+  return lcCache.r;
+};
+const lcStub = (s: AppState) => {
+  const st = s.lineCalc.stub;
+  const d = designStub({ part: st.part, value: st.values[st.part], term: st.term, z0: st.z0, f0: s.f0 }, s.lineCalc.stackup);
+  return d.ok ? d : null;
+};
+const NO_LC = '\\text{(no valid LineCalc solution for the current inputs)}';
 
 const tex = (s: string, display = true): HTMLElement => {
   const el = h('div', { class: display ? 'tex' : 'tex inline' });
@@ -90,6 +109,33 @@ const GROUPS: Array<{ name: string; eqs: Eq[] }> = [
     { title: 'Binomial (maximally flat)', tex: '\\begin{gathered}\\ln\\frac{Z_{n+1}}{Z_n}\\approx2^{-N}C_n^N\\ln\\frac{Z_L}{Z_0}\\\\[2pt] \\frac{\\Delta f}{f_0}=2-\\frac{4}{\\pi}\\cos^{-1}\\left[\\frac12\\left(\\frac{\\Gamma_m}{|A|}\\right)^{1/N}\\right]\\end{gathered}', ref: 'Pozar (5.53), (5.55)' },
     { title: 'Chebyshev (equal ripple)', tex: '\\begin{gathered}\\Gamma(\\theta)=Ae^{-jN\\theta}T_N(\\sec\\theta_m\\cos\\theta)\\\\[2pt] \\sec\\theta_m=\\cosh\\left[\\frac1N\\cosh^{-1}\\left(\\frac{1}{2\\Gamma_m}\\left|\\ln\\frac{Z_L}{Z_0}\\right|\\right)\\right]\\\\[2pt] \\frac{\\Delta f}{f_0}=2-\\frac{4\\theta_m}{\\pi}\\end{gathered}', ref: 'Pozar (5.61), (5.63), (5.64)' },
     { title: 'Exact design (Tables 5.1, 5.2)', tex: '\\begin{gathered}\\frac{|\\Gamma|^2}{1-|\\Gamma|^2}=k^2\\cos^{2N}\\theta\\ \\text{or}\\ k^2\\frac{T_N^2(\\sec\\theta_m\\cos\\theta)}{T_N^2(\\sec\\theta_m)}\\\\[2pt] k^2=\\frac{(Z_L-Z_0)^2}{4Z_LZ_0}\\end{gathered}', ref: 'Insertion-loss form; solved numerically', note: 'Binomial exact values match Table 5.1 to 4 digits. Chebyshev N = 2 matches Table 5.2; for N ≥ 3 the app holds the ripple at exactly Γm, while the printed table values have ripple peaks between about 0.045 and 0.049 for Γm = 0.05 (checked by evaluating them), so they differ by under 0.5 %.' },
+  ] },
+  { name: 'Microstrip (LineCalc)', eqs: [
+    { title: 'Static Z0, homogeneous (air) line', tex: 'Z_{01}(u)=\\frac{\\eta_0}{2\\pi}\\ln\\!\\left[\\frac{f(u)}{u}+\\sqrt{1+\\frac{4}{u^2}}\\right],\\ f(u)=6+(2\\pi-6)e^{-(30.666/u)^{0.7528}},\\ u=\\frac{W}{h}', ref: 'Hammerstad & Jensen, IEEE MTT-S 1980 (0.01 ≤ u ≤ 100)',
+      live: (s) => { const r = lcLine(s); if (!r) return NO_LC; const a = r.analysis; return `u=${n(a.u)},\\ u_r=u+\\Delta u_r=${n(a.u + a.dur)},\\ Z_{01}(u_r)=${n(z01(a.u + a.dur), 3)}\\ \\Omega,\\ \\eta_0=${n(ETA0, 3)}\\ \\Omega`; } },
+    { title: 'Static effective permittivity', tex: '\\varepsilon_e=\\frac{\\varepsilon_r+1}{2}+\\frac{\\varepsilon_r-1}{2}\\left(1+\\frac{10}{u}\\right)^{-ab},\\quad a=1+\\tfrac{1}{49}\\ln\\tfrac{u^4+(u/52)^2}{u^4+0.432}+\\tfrac{1}{18.7}\\ln\\!\\left[1+\\left(\\tfrac{u}{18.1}\\right)^3\\right],\\ b=0.564\\left(\\tfrac{\\varepsilon_r-0.9}{\\varepsilon_r+3}\\right)^{0.053}', ref: 'Hammerstad & Jensen 1980 (εr ≤ 128)',
+      live: (s) => { const r = lcLine(s); if (!r) return NO_LC; const a = r.analysis; return `\\varepsilon_e(u_r)=${n(eeffHJ(a.u + a.dur, s.lineCalc.stackup.er), 5)}`; } },
+    { title: 'Finite strip thickness', tex: '\\Delta u_1=\\frac{T}{\\pi}\\ln\\!\\left(1+\\frac{4e}{T\\coth^2\\sqrt{6.517u}}\\right),\\ \\Delta u_r=\\tfrac12\\left(1+\\operatorname{sech}\\sqrt{\\varepsilon_r-1}\\right)\\Delta u_1,\\ T=\\tfrac{t}{h};\\quad Z_0=\\frac{Z_{01}(u_r)}{\\sqrt{\\varepsilon_e(u_r)}},\\ \\varepsilon_{e}(0)=\\varepsilon_e(u_r)\\left[\\frac{Z_{01}(u_1)}{Z_{01}(u_r)}\\right]^2', ref: 'Hammerstad & Jensen 1980 (used here for t/h ≤ 0.2)',
+      live: (s) => { const r = lcLine(s); if (!r) return NO_LC; const a = r.analysis; return `\\Delta u_1=${n(a.du1, 5)},\\ \\Delta u_r=${n(a.dur, 5)},\\ Z_0(0)=${n(a.z0Static, 3)}\\ \\Omega,\\ \\varepsilon_e(0)=${n(a.eeffStatic, 5)}`; } },
+    { title: 'Dispersion of εeff', tex: '\\varepsilon_e(f)=\\varepsilon_r-\\frac{\\varepsilon_r-\\varepsilon_e(0)}{1+P(f)},\\quad P=P_1P_2\\left[(0.1844+P_3P_4)f_n\\right]^{1.5763},\\ f_n=f\\,h\\ [\\text{GHz·mm}]', ref: 'Kirschning & Jansen, Electron. Lett. 1982 (0.1 ≤ u ≤ 100, εr ≤ 20, h/λ0 ≤ 0.13)',
+      live: (s) => { const r = lcLine(s); if (!r) return NO_LC; const a = r.analysis; return `f_n=${n((s.f0 * s.lineCalc.stackup.h) / 1e6, 4)},\\ \\varepsilon_e(f_0)=${n(a.eeff, 5)}`; } },
+    { title: 'Dispersion of Z0', tex: 'Z_0(f)=Z_0(0)\\left(\\frac{R_{13}}{R_{14}}\\right)^{R_{17}},\\ R_{13}=0.9408\\,\\varepsilon_e(f)^{R_8}-0.9603,\\ R_{14}=(0.9408-R_9)\\,\\varepsilon_e(0)^{R_8}-0.9603', ref: 'Jansen & Kirschning, AEÜ 1983 (0.1 ≤ u ≤ 10, εr ≤ 18, fn ≤ 20 GHz·mm)',
+      live: (s) => { const r = lcLine(s); if (!r) return NO_LC; return `Z_0(f_0)=${n(r.analysis.z0, 4)}\\ \\Omega`; } },
+    { title: 'Synthesis by root finding', tex: 'W:\\ Z_0(W,f_0)-Z_{target}=0,\\qquad \\ell:\\ \\beta(f_0)\\,\\ell-\\theta=0', ref: "Brent's method on ln(W/h) ∈ [ln 0.01, ln 100]; analysis and synthesis use the same function",
+      live: (s) => { const r = lcLine(s); if (!r) return NO_LC; return `W=${n(r.W * 1e3, 5)}\\ \\text{mm}\\Rightarrow Z_0=${n(r.analysis.z0, 6)}\\ \\Omega,\\quad \\ell=${n(r.L * 1e3, 5)}\\ \\text{mm}\\Rightarrow\\theta=${n(r.q.thetaDeg, 4)}^\\circ`; } },
+    { title: 'Guided wavelength and electrical length', tex: '\\lambda_g=\\frac{c}{f\\sqrt{\\varepsilon_e(f)}},\\quad \\beta=\\frac{2\\pi}{\\lambda_g},\\quad \\theta=\\beta\\ell', ref: 'Pozar (3.197)',
+      live: (s) => { const r = lcLine(s); if (!r) return NO_LC; const a = r.analysis; return `\\lambda_g=${n(a.lambdaG * 1e3, 4)}\\ \\text{mm},\\ \\lambda_g/4=${n(a.lambdaG * 250, 4)}\\ \\text{mm},\\ \\theta=${n(r.q.thetaDeg, 3)}^\\circ`; } },
+    { title: 'Dielectric loss', tex: '\\alpha_d=\\frac{k_0\\,\\varepsilon_r(\\varepsilon_e-1)\\tan\\delta}{2\\sqrt{\\varepsilon_e}(\\varepsilon_r-1)}\\ \\text{Np/m}', ref: 'Pozar (3.198)',
+      live: (s) => { const r = lcLine(s); if (!r) return NO_LC; return `\\alpha_d=${n(r.analysis.alphaD * NP_TO_DB / 100, 5)}\\ \\text{dB/cm},\\ \\alpha_d\\ell=${n(r.q.lossDdB, 4)}\\ \\text{dB}`; } },
+    { title: 'Conductor loss with roughness', tex: '\\alpha_c=\\frac{R_s K_i K_r}{Z_0 W},\\ R_s=\\sqrt{\\frac{\\omega\\mu_0}{2\\sigma}},\\ \\delta_s=\\frac{1}{\\sqrt{\\pi f\\mu_0\\sigma}},\\ K_i=e^{-1.2(Z_0/\\eta_0)^{0.7}},\\ K_r=1+\\frac{2}{\\pi}\\arctan\\!\\left[1.4\\left(\\frac{\\Delta}{\\delta_s}\\right)^2\\right]', ref: 'Hammerstad & Jensen 1980; roughness: Hammerstad & Bekkadal 1975',
+      live: (s) => { const r = lcLine(s); if (!r) return NO_LC; const a = r.analysis; return `\\delta_s=${n(a.skinDepth * 1e6, 3)}\\ \\mu\\text{m},\\ R_s=${n(a.Rs, 5)}\\ \\Omega,\\ K_i=${n(a.Ki)},\\ K_r=${n(a.Kr)},\\ \\alpha_c=${n(a.alphaC * NP_TO_DB / 100, 5)}\\ \\text{dB/cm}`; },
+      note: 'K_r only scales conductor loss; it is not applied to Z0 or phase. It saturates at 2 when Δ ≫ δs.' },
+    { title: 'Stub ⇄ L/C at f0', tex: '\\text{short: }Z_{in}=jZ_s\\tan\\theta,\\quad \\text{open: }Z_{in}=-jZ_s\\cot\\theta;\\quad \\theta_{sL}=\\arctan\\frac{\\omega L}{Z_s},\\ \\theta_{oC}=\\arctan(\\omega CZ_s),\\ \\theta_{oL}=\\frac{\\pi}{2}+\\arctan\\frac{\\omega L}{Z_s},\\ \\theta_{sC}=\\pi-\\arctan\\frac{1}{\\omega CZ_s}', ref: 'Pozar (2.45c), (2.46c)',
+      live: (s) => { const d = lcStub(s); if (!d) return NO_LC; const st = s.lineCalc.stub; const X = targetReactance(st.part, st.values[st.part], s.f0); return `X=${n(X, 3)}\\ \\Omega,\\ Z_s=${n(st.z0, 2)}\\ \\Omega,\\ \\text{${st.term}}\\Rightarrow\\theta=${n(d.thetaDeg, 3)}^\\circ=${n(d.lengthWl, 4)}\\lambda`; } },
+    { title: 'Open-end length extension', tex: '\\frac{\\Delta\\ell}{h}=\\frac{\\xi_1\\xi_3\\xi_5}{\\xi_4}\\ \\ \\text{(Kirschning–Jansen–Koster)};\\quad \\text{cf. }\\frac{\\Delta\\ell}{h}=0.412\\frac{\\varepsilon_e+0.3}{\\varepsilon_e-0.258}\\cdot\\frac{W/h+0.262}{W/h+0.813}', ref: 'Kirschning, Jansen & Koster, Electron. Lett. 1981; comparison formula: Pozar Problem 4.30',
+      live: (s) => { const d = lcStub(s); if (!d) return NO_LC; const a = d.analysis, st = s.lineCalc.stackup; return `\\Delta\\ell_{KJK}=${n(openEndExtension(a.u + a.dur, st.er, a.eeff, st.h) * 1e3, 4)}\\ \\text{mm},\\quad \\Delta\\ell_{HB}=${n(openEndHB(d.W, st.h, a.eeff) * 1e3, 4)}\\ \\text{mm}`; } },
+    { title: 'Quarter-wave transformer', tex: 'Z_t=\\sqrt{Z_sZ_L},\\quad \\ell=\\frac{\\lambda_g}{4}', ref: 'Pozar (2.64)',
+      live: (s) => { const q = quarterWaveMicrostrip(s.lineCalc.qw.zs, s.lineCalc.qw.zl, s.lineCalc.stackup, s.f0); if (!q.ok) return NO_LC; return `Z_t=\\sqrt{${n(s.lineCalc.qw.zs, 2)}\\cdot${n(s.lineCalc.qw.zl, 2)}}=${n(q.Zt, 3)}\\ \\Omega\\Rightarrow W=${n(q.W * 1e3, 4)}\\ \\text{mm},\\ \\ell=${n(q.L * 1e3, 4)}\\ \\text{mm}`; } },
   ] },
 ];
 
