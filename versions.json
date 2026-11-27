@@ -1,5 +1,5 @@
 {
-  "current": "0.2.2",
+  "current": "0.3.0",
   "archived": [
     {
       "version": "0.1.0",
@@ -14,6 +14,13 @@
       "path": "v0.2",
       "date": "2026-10-02",
       "note": "Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library; 0.2.2 adds the offline download"
+    },
+    {
+      "version": "0.3.0",
+      "tag": "v0.3.0",
+      "path": "v0.3",
+      "date": "2026-11-27",
+      "note": "LineCalc mode: microstrip analysis/synthesis, stub ⇄ L/C converter, quarter-wave helper, stackups, chart bridges"
     }
   ]
 }

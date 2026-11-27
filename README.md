@@ -1,12 +1,27 @@
 # Browser Smith Chart
 
-**Live app → [waltzy27.github.io/BrowserSmithChart](https://waltzy27.github.io/BrowserSmithChart/)** (current version, v0.2)
+**Live app → [waltzy27.github.io/BrowserSmithChart](https://waltzy27.github.io/BrowserSmithChart/)** (current version, v0.3)
 
 Previous versions stay online at their own links (see [Previous versions](#previous-versions)).
 
 **Offline download → [latest release](https://github.com/Waltzy27/BrowserSmithChart/releases/latest)**. This is one HTML file you double-click; it needs no internet and nothing installed. See [Run offline](#run-offline).
 
 An interactive Smith chart that runs in any modern browser, on desktop and on phones. It works like a paper chart: place a load, use a compass and protractor, rotate along lines, and add series or shunt reactance along the correct contours. It also does the math and shows every equation with live numbers. Nothing to install. It works offline once loaded, and you can install it as an app (PWA).
+
+## New in v0.3: LineCalc
+
+A **Smith Chart | LineCalc** switch in the header swaps the workspace for a microstrip calculator, similar in spirit to Keysight ADS LineCalc but smaller. Both modes share Z0, f0 and the theme, and the Smith chart itself is unchanged. Design range: 100 MHz to 15 GHz. All values are closed-form, first-pass estimates, not EM results.
+
+- **Microstrip analysis.** Inputs: W, L (or the electrical angle), εr, h, copper thickness t, tanδ, conductivity and RMS roughness. Outputs: Z0 and εeff (static and at f), electrical length, λg and λg/4, and conductor, dielectric and total loss in dB. Formulas: Hammerstad–Jensen static Z0 and εeff with the finite-thickness correction, then Kirschning–Jansen dispersion for εeff(f) and Z0(f).
+- **Synthesis.** Either field can be the input. W comes from a target Z0 and L from a target angle. Both use Brent's root finder around the analysis function, so the two cannot disagree. Solved fields are tagged "solved". When no width in 0.01 ≤ W/h ≤ 100 gives the target, you get a plain message instead of NaN.
+- **Validity badge.** Any input outside the stated limits of a formula used (W/h, εr, t/h, h/λ0, f·h, the 100 MHz–15 GHz range, skin depth, and the surface-wave and transverse-resonance thresholds) shows a warning listing which limit was crossed.
+- **Roughness (light).** Conductor loss is multiplied by the Hammerstad–Bekkadal factor K = 1 + (2/π)·atan(1.4·(Δ/δs)²). Roughness is off by default and does not change Z0 or phase.
+- **Stub ⇄ L/C converter.** Enter an L, a C or a reactance, then choose an open or short stub and shunt or series. You get the stub's θ, width and length. The open-end extension ΔL (Kirschning–Jansen–Koster) is shown on its own line, separate from the length. Stubs between λ/4 and λ/2 get a warning that suggests the other stub type. Also included: a tee-junction note, a reactance-vs-frequency plot against the ideal part, and the band where the error stays under 5 %.
+- **Helpers.** A quarter-wave transformer (Zt = √(Zs·ZL), plus its W and L), and λg/4 for any line.
+- **Bridges to the chart.** "Send to Smith chart" adds the designed line, stub or transformer to the network with its Z0, electrical length, loss and velocity factor. "Microstrip dimensions" on a line or stub card opens LineCalc with that Z0 and angle prefilled.
+- **Stackups.** Presets for FR-4, RO4350B, RO4003C and alumina. Every field is editable, and stackups export and import as JSON.
+- **Equations tab.** A new "Microstrip (LineCalc)" group shows each formula with live numbers.
+- Saved-state schema 2. v0.2.x autosaves and project files migrate on load, and a test confirms that a v0.2.2 project loses nothing.
 
 ## New in v0.2
 
@@ -93,7 +108,7 @@ An interactive Smith chart that runs in any modern browser, on desktop and on ph
 
 ## Verified math
 
-The math kernel (`src/math`, `src/rf`, `src/io`) is plain TypeScript with no DOM dependencies. It is tested against worked examples from D. M. Pozar, *Microwave Engineering*, 4th ed., and against golden values from [scikit-rf](https://scikit-rf.org/). CI runs all 83 tests before every deploy.
+The math kernel (`src/math`, `src/rf`, `src/io`) is plain TypeScript with no DOM dependencies. It is tested against worked examples from D. M. Pozar, *Microwave Engineering*, 4th ed., and against golden values from [scikit-rf](https://scikit-rf.org/). CI runs all 120 tests before every deploy. The v0.3 microstrip code (`src/tl`) follows the same rules: no DOM, SI units.
 
 | Check | Expected (Pozar) | Result |
 | --- | --- | --- |
@@ -114,6 +129,15 @@ The math kernel (`src/math`, `src/rf`, `src/io`) is plain TypeScript with no DOM
 | **v0.2** Table 5.2: exact Chebyshev N = 3, 4 | e.g. ratio 2, Γm 0.05: 1.1475, 1.4142, 1.7429 | within 0.5 %; the app's design has ripple of exactly Γm (the printed values peak at 0.045–0.049) |
 | **v0.2** Pi/T, 200 Ω → 50 Ω, Q = 5 | R_v = 7.69 Ω, node Q = 5 | node Q = 5.000; every Pi/T solution cascades to \|Γ_in\| < 10⁻⁹ |
 | **v0.2** Non-ideal L/C | Q(f0) = Q0, resonance at SRF | Q honoured to 10⁻⁹; L goes open and C goes resistive at SRF |
+| **v0.3** Ex. 3.7: 50 Ω on alumina (εr 9.9, 0.5 mm), 270° at 10 GHz, CAD values | W 0.478 mm, εe 6.83, ℓ 8.61 mm, αd 0.022 dB/cm | 0.4845 mm, 6.882, 8.571 mm, 0.0227 dB/cm (test tolerance 2 / 1 / 1 / 5 %) |
+| **v0.3** Ex. 3.8: 25 Ω, εr 10, h 0.65 mm | W 2.00 mm, εe(0) 7.53 | 2.004 mm, 7.522 (0.5 %) |
+| **v0.3** Ex. 6.2: 50 Ω, εr 2.08, h 1.59 mm | W 5.08 mm, εe 1.80 | 5.078 mm, 1.797 (0.5 %) |
+| **v0.3** Prob. 3.20: 100 Ω, εr 2.2, h 0.51 mm, 5 GHz | W 0.457 mm, λg 4.525 cm | 0.4557 mm, 4.510 cm (0.5 % / 1 %) |
+| **v0.3** Prob. 4.30: open-end extension, εr 2.2, d 1.58 mm, w 4.87 mm | Δℓ = 0.082 cm | 0.0816 cm (Kirschning–Jansen–Koster); Hammerstad–Bekkadal 0.0749 cm |
+| **v0.3** scikit-rf 2.1 `MLine` (HJ + KJ), 5 lines from 12 Ω to 109 Ω | Z0, εeff static and at f, αc | agree to < 10⁻⁶ relative |
+| **v0.3** Synthesis round trip, 6 stackups × 7 targets × 3 frequencies | Z0 = target | within 10⁻⁶ Ω |
+| **v0.3** Stub ⇄ L/C, all four open/short × L/C cases, shunt and series | X = ωL or −1/ωC at f0 | cascaded through `applyElement`, agrees to 10⁻⁹ |
+| **v0.3** Roughness factor | K(0) = 1, K → 2 for Δ ≫ δs | 1, > 1.999 at Δ = 100 δs |
 
 The tests also cover identities: Γ ↔ z round trips, Z/Y being a 180° reflection, points lying on their r/x/g/b/Q circles, λ/2 periodicity, clockwise 2βℓ rotation, and lossless lines preserving |Γ|.
 
@@ -127,6 +151,9 @@ src/
   rf/     network.ts                          element models (incl. non-ideal L/C), Γ-domain cascade
           matching.ts                         L, Pi/T, single/double/triple stub, λ/4, multisection synthesis
           multisection.ts                     binomial/Chebyshev: small-reflection + exact (Levenberg–Marquardt)
+  tl/     microstrip.ts                       v0.3: Hammerstad–Jensen + Kirschning–Jansen analysis, losses, limits, open end
+          synth.ts  linecalc.ts               Brent root finder; W from Z0, L from θ (wraps the analysis)
+          stub.ts  helpers.ts  stackup.ts     stub ⇄ L/C, 5 % bandwidth, λ/4 helper, stackup presets + JSON
   io/     touchstone.ts                       parser/serializer with diagnostics
           touchstone.worker.ts  parseAsync.ts off-main-thread parsing for large files
   state/  store.ts  derive.ts  interactive.ts immutable state, undo/redo, autosave, memoized derivation
@@ -134,6 +161,7 @@ src/
   ui/     chart.ts                            layered SVG grid → canvas traces → SVG interaction + HUD
           schematic.ts                        schematic strip with pointer-based reordering
           versions.ts                         version menu (reads /versions.json)
+          lineCalc.ts                         v0.3 LineCalc form (unit conversion and layout only; maths in src/tl)
           panel*.ts  dom.ts  readout.ts       panels, inputs (engineering notation: "2.2n", "500 MHz")
 scripts/  build-archives.mjs                  rebuilds every archived release into dist/<path>/
 public/   sw.js  manifest.webmanifest  examples/*.s1p|s2p
@@ -143,6 +171,7 @@ tests/    Vitest suites + scikit-rf golden fixtures (scripts/make_fixtures.py)
 - **Single source of truth.** The chain of elements and the load live in one immutable state object. The chart, panels, equations, and exports are all derived from that state, so they always agree.
 - **Γ-domain arithmetic.** Elements are applied as Möbius maps in the Γ plane, so open and short circuits stay finite and exact.
 - **Constraint drag.** Dragging a point solves for the element value that lands nearest the pointer on that element's contour. A series L stays on its constant-r circle; a line stays on its SWR circle or spiral.
+- **Two modes, one Store.** `state.mode` selects the Smith chart or LineCalc. The mode is view-only, so it is not an undo step, and both modes read Z0, f0 and the theme from the same state. LineCalc inputs live in `state.lineCalc`, which was added in schema 2 and is migrated from schema 1.
 - **Rendering.** The static grid is cached as SVG. Dense traces are drawn on canvas. Interactive overlays use SVG with Pointer Events (mouse, pen, and touch).
 
 ## Run offline
@@ -194,7 +223,8 @@ Each version has its own autosave key, and its service worker uses its own cache
 
 | Version | Link | Notes |
 | --- | --- | --- |
-| v0.2.2 (current) | [waltzy27.github.io/BrowserSmithChart](https://waltzy27.github.io/BrowserSmithChart/) · permanent: [/v0.2/](https://waltzy27.github.io/BrowserSmithChart/v0.2/) | Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library. 0.2.1 fixes the version menu labelling the permanent /v0.2/ link as archived; 0.2.2 adds the offline download. |
+| v0.3.0 (current) | [waltzy27.github.io/BrowserSmithChart](https://waltzy27.github.io/BrowserSmithChart/) · permanent: [/v0.3/](https://waltzy27.github.io/BrowserSmithChart/v0.3/) | LineCalc mode: microstrip analysis and synthesis, stub ⇄ L/C converter, quarter-wave helper, stackups, chart bridges. |
+| v0.2.2 | [waltzy27.github.io/BrowserSmithChart/v0.2/](https://waltzy27.github.io/BrowserSmithChart/v0.2/) | Schematic strip, non-ideal L/C, Pi/T, double/triple stubs, multisection transformers, project library. 0.2.1 fixes the version menu labelling the permanent /v0.2/ link as archived; 0.2.2 adds the offline download. |
 | v0.1.0 | [waltzy27.github.io/BrowserSmithChart/v0.1/](https://waltzy27.github.io/BrowserSmithChart/v0.1/) | First build: verified kernel, drafting tools, L / single-stub / λ/4 matching, Touchstone import |
 
 Source for each release is available from its tag and on the [Releases](https://github.com/Waltzy27/BrowserSmithChart/releases) page.
@@ -203,8 +233,9 @@ Source for each release is available from its tag and on the [Releases](https://
 
 See [docs/ROADMAP.md](docs/ROADMAP.md):
 - v0.2 is done: non-ideal components, Pi/T networks with a chosen Q, double and triple stubs, multisection transformers, a schematic strip, a project library, and Touchstone parsing in a worker.
-- v0.3 adds an optimizer, Monte Carlo, stability/gain/noise circles, N-port renormalization, and TDR.
-- v0.4 adds live NanoVNA input over Web Serial, a guided lessons mode, and a 3D Smith chart.
+- v0.3 is done: LineCalc (microstrip calculator and stub ⇄ L/C converter).
+- v0.4 adds an optimizer, Monte Carlo, stability/gain/noise circles, N-port renormalization, and TDR.
+- v0.5 adds live NanoVNA input over Web Serial, a guided lessons mode, and a 3D Smith chart.
 
 ## License
 

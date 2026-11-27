@@ -12,10 +12,26 @@ Version 0.1 is the first build: the analytic math kernel plus the interactive dr
 | Double- and triple-stub tuners | Done | Uses (5.21)–(5.24). The chart shows the rotated g = 1 circle and the forbidden region. The triple stub searches the stub-1 length numerically and keeps the shortest total stub length. |
 | Multi-section transformers | Done | Binomial and Chebyshev, N ≤ 7. Each comes as a small-reflection design (5.53)/(5.61)–(5.63) and an exact design, which fits the insertion-loss function by Levenberg–Marquardt. The exact designs match Tables 5.1/5.2. |
 | IndexedDB project library | Done | `src/state/library.ts`. Autosave falls back to IndexedDB when localStorage is full. The autosave key is now per version (`…:project:v2`), and older work migrates on first start. |
-| Web Worker for import | Done | Touchstone files over 256 kB are parsed in a module worker. Applying the network to a trace stays on the main thread, but is decimated while you drag (10k points × 6 elements ≈ 75 ms per full evaluation, measured). Moving that work to a worker is left for v0.3, alongside the optimizer and Monte Carlo. |
+| Web Worker for import | Done | Touchstone files over 256 kB are parsed in a module worker. Applying the network to a trace stays on the main thread, but is decimated while you drag (10k points × 6 elements ≈ 75 ms per full evaluation, measured). Moving that work to a worker is left for v0.4, alongside the optimizer and Monte Carlo. |
 | Version archive and menu | Done (added) | `versions.json`, `scripts/build-archives.mjs`, and the header badge. Every release stays live at `/vX.Y/`. |
 
-## Version 0.3 — analysis tools
+## Version 0.3 — LineCalc, done (released as v0.3.0)
+
+The optimizer and Monte Carlo milestone moved to v0.4. LineCalc was a self-contained feature with no effect on the chart kernel, so shipping it first kept each release small and kept the published /v0.2/ link unchanged.
+
+| Add-on | Status | As built |
+| --- | --- | --- |
+| Microstrip analysis | Done | `src/tl/microstrip.ts`: Hammerstad–Jensen static Z0/εeff with thickness, Kirschning–Jansen εeff(f) and Z0(f), Pozar (3.198) dielectric loss, HJ conductor loss with the current-distribution factor. Validity warnings, never NaN. Matches scikit-rf `MLine` to 10⁻⁶. |
+| Synthesis | Done | `src/tl/synth.ts`: Brent on ln(W/h) ∈ [ln 0.01, ln 100] and on L. Round trip to 10⁻⁶ Ω. |
+| Roughness | Done (light) | Hammerstad–Bekkadal multiplier on αc only. |
+| Stub ⇄ L/C | Done (shunt and series) | `src/tl/stub.ts`. The series case reuses the same θ relations and the chart's existing series-stub model, so it needed no extra maths. In microstrip it is flagged as not directly buildable. The open-end ΔL (Kirschning–Jansen–Koster) is shown separately. |
+| Quarter-wave, λg/4 helpers | Done | `src/tl/helpers.ts`, reusing `quarterWaveZ1` from `rf/matching`. |
+| Chart bridges | Done | "Send to Smith chart" and "Microstrip dimensions". |
+| Stackups | Done | Presets plus JSON import/export; schema 2 with migration. |
+
+Possible LineCalc follow-ups: a dispersive line model in the chart (today a chart Line is non-dispersive, so a microstrip line sent to the chart is exact only at f0), tee-junction and via models, stripline and CPW, coupled lines, and a mil/inch unit toggle.
+
+## Version 0.4 — analysis tools
 
 | Add-on | Why | Design notes |
 | --- | --- | --- |
@@ -26,7 +42,7 @@ Version 0.1 is the first build: the analytic math kernel plus the interactive dr
 | Time-domain view (TDR) | Shows where a discontinuity sits along the line. It mirrors the low-pass and band-pass modes found in VNAs and in [scikit-rf's time-domain tools](https://scikit-rf.readthedocs.io/en/latest/examples/networktheory/Time%20Domain.html). | Use an inverse FFT with Kaiser windows and time gating, then convert the gated result back to a Smith trace. |
 | Touchstone 2.1 extras | Mixed-mode and per-port reference keywords from the [IBIS Touchstone 2.1 specification](https://ibis.org/touchstone_ver2.1/) (ratified January 2024). | The parser architecture already reads keywords; it needs more parameter keywords and matrix formats. |
 
-## Version 0.4 — hardware and learning
+## Version 0.5 — hardware and learning
 
 | Add-on | Why | Design notes |
 | --- | --- | --- |
