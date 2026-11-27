@@ -41,6 +41,8 @@ export interface NumFieldOpts {
   min?: number;
   title?: string;
   onCommit: (v: number) => void;
+  /** Optional: called on every keystroke with a valid value (live previews; no store commit). */
+  onLive?: (v: number) => void;
 }
 
 /** Labelled numeric input accepting engineering notation (e.g. "2.2n", "500 MHz"). */
@@ -61,6 +63,13 @@ export function numField(o: NumFieldOpts): HTMLElement {
     }
   };
   input.addEventListener('change', commit);
+  if (o.onLive) {
+    const live = o.onLive;
+    input.addEventListener('input', () => {
+      const v = parseEngineering(input.value.replace('−', '-'), o.unit ?? '');
+      if (Number.isFinite(v) && (o.min === undefined || v >= o.min)) live(v);
+    });
+  }
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); }
     if (e.key === 'Escape') { input.value = display(o.value); input.classList.remove('invalid'); input.blur(); }

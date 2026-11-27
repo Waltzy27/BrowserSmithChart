@@ -7,6 +7,7 @@ import { type Store, type AppState, newId } from '../state/store';
 import { derive } from '../state/derive';
 import { rlText } from './readout';
 import { h, numField, segmented, selectField, rebuild, svgIcon } from './dom';
+import { lineCalcFromElement } from './lineCalc';
 
 type EntryMode = 'Z' | 'z' | 'Y' | 'G' | 'Gp';
 let entryMode: EntryMode = 'Z';
@@ -172,6 +173,9 @@ export class DesignPanel {
         numField({ label: 'Velocity factor', value: el.vf, key: `${el.id}:vf`, min: 1e-3, onCommit: (v) => upd({ vf: Math.min(1, v) } as Partial<Element>) }),
         h('div', { class: 'readonly' }, h('span', { class: 'field-label' }, 'Physical length'), h('span', { class: 'mono' }, formatEngineering(el.lengthWl * lam * el.vf, 'm', 4))),
       ));
+      body.push(h('div', { class: 'row' },
+        h('button', { type: 'button', class: 'btn btn-sm', title: 'Open LineCalc with this Z0 and electrical length to get microstrip width and length',
+          onclick: () => this.store.update((st) => lineCalcFromElement(st, el, i)) }, 'Microstrip dimensions')));
     } else if (el.kind === 'transformer') {
       body.push(numField({ label: 'Turns ratio n (Z_in = n²·Z)', value: el.n, key: `${el.id}:n`, min: 1e-6, onCommit: (v) => upd({ n: v } as Partial<Element>) }));
     } else {

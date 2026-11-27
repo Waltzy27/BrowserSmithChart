@@ -6,7 +6,7 @@ import './styles/app.css';
 import { type Complex, c, mul } from './math/complex';
 import { gammaToZ, gammaMetrics } from './math/smith';
 import { fix, formatRect } from './math/units';
-import { Store, defaultState, loadAutosave, loadLargeAutosave, type Tool, type GridMode, type AppState } from './state/store';
+import { Store, defaultState, loadAutosave, loadLargeAutosave, type Tool, type GridMode, type AppState, type AppMode } from './state/store';
 import { ChartView } from './ui/chart';
 import { DesignPanel } from './ui/panelDesign';
 import { InspectPanel } from './ui/panelInspect';
@@ -14,6 +14,7 @@ import { CalcPanel } from './ui/panelCalc';
 import { EquationsPanel } from './ui/panelEquations';
 import { DataPanel } from './ui/panelData';
 import { SchematicStrip } from './ui/schematic';
+import { LineCalcView } from './ui/lineCalc';
 import { versionBadge } from './ui/versions';
 import { h, svgIcon, segmented, toggle, toast } from './ui/dom';
 
@@ -29,6 +30,7 @@ const calc = new CalcPanel(store);
 const equations = new EquationsPanel(store);
 const data = new DataPanel(store);
 const schematic = new SchematicStrip(store);
+const lineCalc = new LineCalcView(store);
 data.onExportSVG = () => chart.exportSVG();
 
 /* ---------------- icons ---------------- */
@@ -60,8 +62,12 @@ const helpBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': '
 const gridSeg = h('div', { class: 'grid-seg' });
 const renderGridSeg = () => gridSeg.replaceChildren(segmented<GridMode>('Chart grid', [['Z', 'Z', 'Impedance grid'], ['Y', 'Y', 'Admittance grid'], ['ZY', 'ZY', 'Impedance grid with admittance overlay'], ['YZ', 'YZ', 'Admittance grid with impedance overlay']], store.get().gridMode, (v) => store.update((s) => ({ ...s, gridMode: v })), true));
 
+const modeSeg = h('div', { class: 'mode-seg' });
+const renderModeSeg = () => modeSeg.replaceChildren(segmented<AppMode>('Workspace mode', [['smith', 'Smith Chart', 'Smith chart workbench'], ['linecalc', 'LineCalc', 'Microstrip calculator and stub ⇄ L/C converter']], store.get().mode, (v) => store.update((s) => ({ ...s, mode: v }), false)));
+
 const header = h('header', { class: 'topbar' },
   h('div', { class: 'brand' }, svgIcon(I.logo, 26), h('div', {}, h('span', { class: 'brand-name' }, 'Smith Chart'), h('span', { class: 'brand-sub' }, 'browser RF workbench')), versionBadge()),
+  modeSeg,
   h('div', { class: 'top-ctrls' }, gridSeg, h('span', { class: 'divider' }), undoBtn, redoBtn, themeBtn, helpBtn,
     h('a', { class: 'icon-btn', href: 'https://github.com/Waltzy27/BrowserSmithChart', target: '_blank', rel: 'noopener', 'aria-label': 'Source on GitHub', title: 'Source on GitHub' }, svgIcon(I.github))),
 );
@@ -148,14 +154,31 @@ function renderTabs(): void {
 }
 wide.addEventListener('change', () => renderTabs());
 
-const app = h('div', { class: 'app' }, header, h('main', { class: 'workspace' }, leftAside, chartArea, rightAside));
+const workspace = h('main', { class: 'workspace' }, leftAside, chartArea, rightAside, lineCalc.el);
+const app = h('div', { class: 'app' }, header, workspace);
 document.getElementById('app')!.replaceWith(app);
 renderTabs();
+
+/** Smith chart and LineCalc share the Store; switching only swaps which part of the workspace is shown. */
+function applyMode(): void {
+  const m = store.get().mode;
+  workspace.dataset.mode = m;
+  app.dataset.mode = m;
+  lineCalc.setVisible(m === 'linecalc');
+  if (m === 'smith') { equations.setVisible(activeTab === 'eq'); data.setVisible(activeTab === 'data'); }
+  else { equations.setVisible(false); data.setVisible(false); }
+  renderModeSeg();
+}
+lineCalc.onShowEquations = () => { activeTab = 'eq'; store.update((s) => ({ ...s, mode: 'smith' }), false); renderTabs(); };
+// The mobile tab bar sticks just below the header, whose height changes when it wraps.
+new ResizeObserver(() => document.documentElement.style.setProperty('--topbar-h', `${header.offsetHeight}px`)).observe(header);
+applyMode();
 
 /* ---------------- reactions ---------------- */
 store.subscribe((s, p) => {
   if (s.theme !== p.theme) document.documentElement.dataset.theme = s.theme;
   if (s.gridMode !== p.gridMode) renderGridSeg();
+  if (s.mode !== p.mode) applyMode();
   if (s.tool !== p.tool || s.snap !== p.snap) renderToolbar();
   if (s.overlays !== p.overlays && !layersPop.hidden) renderLayers();
   syncHeader();
@@ -177,6 +200,7 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) store.redo(); else store.undo(); return; }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); store.redo(); return; }
   if (mod) return;
+  if (store.get().mode !== 'smith') return; // chart shortcuts only apply to the chart
   const toolKey: Record<string, Tool> = { v: 'select', p: 'place', c: 'compass', a: 'protractor', d: 'ruler' };
   const k = e.key.toLowerCase();
   if (toolKey[k]) { store.update((s) => ({ ...s, tool: toolKey[k] }), false); return; }
@@ -226,6 +250,8 @@ function openHelp(): void {
       h('li', {}, h('kbd', {}, 'D'), ' Dividers — measure distances in the Γ plane.')),
     h('h3', {}, 'Schematic strip'),
     h('p', {}, 'Below the chart, the network is drawn from the load (left) to the source (right). Click an element to select it. Drag it sideways to reorder (on touch screens, press and hold first). With the keyboard, use Alt + ← / → to move the focused element.'),
+    h('h3', {}, 'LineCalc'),
+    h('p', {}, 'The Smith Chart | LineCalc switch at the top swaps the workspace for a microstrip calculator: width and length from Z0 and electrical length (or the reverse), losses, a stub ⇄ L/C converter and a quarter-wave helper. "Send to Smith chart" adds the designed line or stub to the network; "Microstrip dimensions" on a line or stub card goes the other way. Both modes share Z0, f0 and the theme. Values are first-pass closed-form estimates, not EM results.'),
     h('h3', {}, 'Shortcuts'),
     h('ul', {},
       h('li', {}, h('kbd', {}, 'Ctrl/⌘ Z'), ' undo · ', h('kbd', {}, 'Ctrl/⌘ ⇧ Z'), ' redo'),
